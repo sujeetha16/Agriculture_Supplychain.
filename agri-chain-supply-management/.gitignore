@@ -1,0 +1,11 @@
+# Path: .gitignore
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+coverage/
+artifacts/
+cache/
+typechain-types/
+*.log
