@@ -1,0 +1,184 @@
+[
+  {
+    "productId": 101,
+    "name": "Organic Honeycrisp Apples",
+    "cropType": "Fruits",
+    "harvestDate": "2026-09-15",
+    "farmLocation": "Yakima Valley Orchards, Washington",
+    "quantity": "2,500 kg",
+    "qualityGrade": "Grade A+ (Premium Export)",
+    "storageConditions": "Cold Chain Controlled (3.5°C, 90% RH)",
+    "certifications": ["USDA Organic", "GlobalG.A.P.", "Non-GMO Verified"],
+    "estimatedShelfLife": "60 Days",
+    "notes": "Crisp texture, high Brix sugar content (14.2°), harvested under optimal morning conditions.",
+    "farmer": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+    "distributor": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+    "retailer": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4df",
+    "consumer": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+    "status": "SoldToConsumer",
+    "qrBlockchainHash": "0xa1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0",
+    "history": [
+      {
+        "action": "CREATED",
+        "actorAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+        "receiverAddress": null,
+        "date": "2026-09-15",
+        "txHash": "0xa1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0"
+      },
+      {
+        "action": "DISPATCHED_TO_DISTRIBUTOR",
+        "actorAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+        "receiverAddress": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+        "date": "2026-09-17",
+        "txHash": "0xb2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef01"
+      },
+      {
+        "action": "RECEIVED_BY_DISTRIBUTOR",
+        "actorAddress": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+        "receiverAddress": null,
+        "date": "2026-09-19",
+        "txHash": "0xc3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef012"
+      },
+      {
+        "action": "DISPATCHED_TO_RETAILER",
+        "actorAddress": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+        "receiverAddress": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4df",
+        "date": "2026-09-22",
+        "txHash": "0xd4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0123"
+      },
+      {
+        "action": "RECEIVED_BY_RETAILER",
+        "actorAddress": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4df",
+        "receiverAddress": null,
+        "date": "2026-09-24",
+        "txHash": "0xe5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef01234"
+      },
+      {
+        "action": "SOLD_TO_CONSUMER",
+        "actorAddress": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4df",
+        "receiverAddress": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+        "date": "2026-09-26",
+        "txHash": "0xf60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef012345"
+      }
+    ]
+  },
+  {
+    "productId": 102,
+    "name": "Highland Arabica Coffee Beans",
+    "cropType": "Coffee & Tea",
+    "harvestDate": "2026-09-28",
+    "farmLocation": "Santa Barbara Highlands, Honduras",
+    "quantity": "800 kg",
+    "qualityGrade": "Specialty Grade (SCA 88.5)",
+    "storageConditions": "Hermetic GrainPro (18°C, 55% RH)",
+    "certifications": ["Fair Trade", "Rainforest Alliance", "Organic"],
+    "estimatedShelfLife": "180 Days",
+    "notes": "Single origin red bourbon variety, washed process, notes of peach, bergamot, and honey.",
+    "farmer": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+    "distributor": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+    "retailer": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4df",
+    "consumer": null,
+    "status": "ReceivedByRetailer",
+    "qrBlockchainHash": "0x11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff",
+    "history": [
+      {
+        "action": "CREATED",
+        "actorAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+        "receiverAddress": null,
+        "date": "2026-09-28",
+        "txHash": "0x11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff"
+      },
+      {
+        "action": "DISPATCHED_TO_DISTRIBUTOR",
+        "actorAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+        "receiverAddress": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+        "date": "2026-09-30",
+        "txHash": "0x223344556677889900aabbccddeeff11223344556677889900aabbccddeeff22"
+      },
+      {
+        "action": "RECEIVED_BY_DISTRIBUTOR",
+        "actorAddress": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+        "receiverAddress": null,
+        "date": "2026-10-02",
+        "txHash": "0x3344556677889900aabbccddeeff11223344556677889900aabbccddeeff33"
+      },
+      {
+        "action": "DISPATCHED_TO_RETAILER",
+        "actorAddress": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+        "receiverAddress": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4df",
+        "date": "2026-10-04",
+        "txHash": "0x44556677889900aabbccddeeff11223344556677889900aabbccddeeff44"
+      },
+      {
+        "action": "RECEIVED_BY_RETAILER",
+        "actorAddress": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4df",
+        "receiverAddress": null,
+        "date": "2026-10-06",
+        "txHash": "0x556677889900aabbccddeeff11223344556677889900aabbccddeeff55"
+      }
+    ]
+  },
+  {
+    "productId": 103,
+    "name": "Heritage Basmati Rice",
+    "cropType": "Grains & Cereals",
+    "harvestDate": "2026-10-02",
+    "farmLocation": "Indo-Gangetic Basin, Punjab",
+    "quantity": "5,000 kg",
+    "qualityGrade": "Grade A Extra Long Grain",
+    "storageConditions": "Dry Aerated Silo (22°C, 12% Grain Moisture)",
+    "certifications": ["ISO 22000", "Non-GMO Project", "GAP"],
+    "estimatedShelfLife": "730 Days",
+    "notes": "Aged 12 months for elongation ratio > 2.0x, traditional aromatic harvest.",
+    "farmer": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+    "distributor": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+    "retailer": null,
+    "consumer": null,
+    "status": "DispatchedToDistributor",
+    "qrBlockchainHash": "0x6677889900112233445566778899001122334455667788990011223344556677",
+    "history": [
+      {
+        "action": "CREATED",
+        "actorAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+        "receiverAddress": null,
+        "date": "2026-10-02",
+        "txHash": "0x6677889900112233445566778899001122334455667788990011223344556677"
+      },
+      {
+        "action": "DISPATCHED_TO_DISTRIBUTOR",
+        "actorAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+        "receiverAddress": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+        "date": "2026-10-05",
+        "txHash": "0x7788990011223344556677889900112233445566778899001122334455667788"
+      }
+    ]
+  },
+  {
+    "productId": 104,
+    "name": "Organic Hass Avocados",
+    "cropType": "Fruits",
+    "harvestDate": "2026-10-08",
+    "farmLocation": "San Diego Coastal Groves, California",
+    "quantity": "1,200 kg",
+    "qualityGrade": "Grade A Premium",
+    "storageConditions": "Ethylene Monitored (5.5°C, 90% RH)",
+    "certifications": ["USDA Organic", "Fair Trade Certified"],
+    "estimatedShelfLife": "21 Days",
+    "notes": "Hand-picked at 24% dry matter for optimal buttery flavor and ripening profile.",
+    "farmer": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+    "distributor": null,
+    "retailer": null,
+    "consumer": null,
+    "status": "Created",
+    "qrBlockchainHash": "0x8899001122334455667788990011223344556677889900112233445566778899",
+    "history": [
+      {
+        "action": "CREATED",
+        "actorAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+        "receiverAddress": null,
+        "date": "2026-10-08",
+        "txHash": "0x8899001122334455667788990011223344556677889900112233445566778899"
+      }
+    ]
+  }
+]

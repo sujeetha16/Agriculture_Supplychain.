@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: agri-chain-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: agri_chain
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - agri-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agri-chain-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - MONGODB_URI=mongodb://mongodb:27017/agri_chain
+      - FRONTEND_URL=http://localhost:5173
+      - NODE_ENV=production
+    depends_on:
+      - mongodb
+    networks:
+      - agri-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:5000/api
+        - VITE_CONTRACT_ADDRESS=0xB601FDccec475b61B8Bc9f3661eC4F73B7499a2D
+        - VITE_CHAIN_ID=11155111
+        - VITE_SEPOLIA_RPC_URL=https://rpc.sepolia.org
+    container_name: agri-chain-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - agri-network
+
+volumes:
+  mongo-data:
+    driver: local
+
+networks:
+  agri-network:
+    driver: bridge

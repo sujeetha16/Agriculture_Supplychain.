@@ -10,6 +10,7 @@ import FarmerAddProduct from "./pages/FarmerAddProduct";
 import ProductActions from "./pages/ProductActions";
 import TraceProduct from "./pages/TraceProduct";
 import ScanQR from "./pages/ScanQR";
+import CloudArchitecture from "./pages/CloudArchitecture";
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/trace" element={<TraceProduct />} />
             <Route path="/trace/:productId" element={<TraceProduct />} />
             <Route path="/scan" element={<ScanQR />} />
+            <Route path="/cloud-architecture" element={<CloudArchitecture />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>
