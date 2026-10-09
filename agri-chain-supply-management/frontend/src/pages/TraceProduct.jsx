@@ -6,6 +6,7 @@ import ProductTimeline from "../components/ProductTimeline";
 import ProductQRCode from "../components/QRCode";
 import { getProduct, getProducts } from "../services/api";
 import { getOnChainProduct } from "../services/blockchain";
+import { resolveStakeholder } from "../services/stakeholders";
 
 export default function TraceProduct() {
   const { productId: urlProductId } = useParams();
@@ -196,6 +197,19 @@ export default function TraceProduct() {
 
                       <div className="row g-3 my-2 text-secondary small">
                         <div className="col-sm-6">
+                          <div>
+                            <strong>Origin Farmer:</strong>{" "}
+                            {(() => {
+                              const f = resolveStakeholder(product.farmer);
+                              return f ? (
+                                <span className="text-dark fw-medium">
+                                  {f.avatar} {f.name} ({f.organization})
+                                </span>
+                              ) : (
+                                <span className="text-dark fw-medium">👨‍🌾 John Vance (Green Valley Organic Farms)</span>
+                              );
+                            })()}
+                          </div>
                           <div><strong>Origin Farm:</strong> {product.farmLocation || "Origin Farm"}</div>
                           <div><strong>Harvest Date:</strong> {product.harvestDate}</div>
                           <div><strong>Batch Quantity:</strong> {product.quantity || "1,000 kg"}</div>

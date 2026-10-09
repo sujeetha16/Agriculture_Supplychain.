@@ -9,7 +9,7 @@ import Alert from "../components/Alert";
 const roleNames = { 1: "Farmer", 2: "Distributor", 3: "Retailer", 4: "Consumer" };
 
 export default function Dashboard() {
-  const { address, isDemoMode, demoRole, currentPersona } = useWallet();
+  const { user, address } = useWallet();
   const [products, setProducts] = useState([]);
   const [stats, setStats] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -83,9 +83,9 @@ export default function Dashboard() {
             <span className="badge bg-success bg-opacity-10 text-success border border-success-subtle">
               <i className="bi bi-shield-check me-1"></i>Production Cloud Console
             </span>
-            {isDemoMode && currentPersona && (
+            {user && (
               <span className="badge bg-dark text-white">
-                Active Persona: {currentPersona.name} ({currentPersona.roleName})
+                Active Portal: {user.avatar} {user.name} ({user.organization})
               </span>
             )}
           </div>
@@ -337,7 +337,7 @@ export default function Dashboard() {
             <div className="col-md-6 col-lg-3" key={product.productId}>
               <ProductCard
                 product={product}
-                role={isDemoMode ? demoRole : null}
+                role={user ? user.role : null}
               />
             </div>
           ))}

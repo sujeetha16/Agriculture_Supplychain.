@@ -14,23 +14,15 @@ import {
   dispatchToRetailer,
   receiveFromDistributor,
   sellToConsumer,
-  generateSimulatedTxHash,
-  DEMO_PERSONAS
+  generateSimulatedTxHash
 } from "../services/blockchain";
-
-const roleNames = {
-  1: "Farmer",
-  2: "Distributor",
-  3: "Retailer",
-  4: "Consumer"
-};
+import { STAKEHOLDERS, resolveStakeholder } from "../services/stakeholders";
 
 export default function ProductActions() {
   const { productId } = useParams();
-  const { address, isDemoMode, demoRole, currentPersona, switchDemoRole } = useWallet();
+  const { user, address, useMetaMaskSigner, loginAsRole } = useWallet();
 
   const [product, setProduct] = useState(null);
-  const [role, setRole] = useState(0);
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     receiverAddress: "",
@@ -45,18 +37,6 @@ export default function ProductActions() {
     try {
       const data = await getProduct(productId);
       setProduct(data);
-
-      if (isDemoMode) {
-        setRole(demoRole);
-      } else if (address && window.ethereum) {
-        try {
-          const { contract } = await getSignerAndContract();
-          setRole(Number(await contract.getRole(address)));
-        } catch (_) {
-          // If contract query fails or role not registered, use fallback
-          setRole(0);
-        }
-      }
     } catch (err) {
       setError(err.response?.data?.message || err.message);
     }
@@ -64,31 +44,31 @@ export default function ProductActions() {
 
   useEffect(() => {
     load();
-  }, [productId, address, isDemoMode, demoRole]);
+  }, [productId, user]);
 
-  // Set intelligent defaults for receiver address based on demo personas
+  // Set intelligent defaults for destination stakeholder
   useEffect(() => {
     if (!product) return;
     if (product.status === "Created") {
       setForm((f) => ({
         ...f,
-        receiverAddress: DEMO_PERSONAS[2].address,
-        location: "Pacific NW Cold-Chain Logistics Hub",
-        notes: "Inspection passed; loaded into reefer truck at 3.5°C"
+        receiverAddress: STAKEHOLDERS[1].walletAddress,
+        location: "Pacific NW Cold-Chain Logistics Hub, Seattle",
+        notes: "Inspected at farm gate; loaded into temperature-controlled reefer at 3.5°C"
       }));
     } else if (product.status === "ReceivedByDistributor") {
       setForm((f) => ({
         ...f,
-        receiverAddress: DEMO_PERSONAS[3].address,
-        location: "FreshMarket Store #104, Westlake",
-        notes: "Dispatched from warehouse dock 4; verified unbroken cold-chain seal"
+        receiverAddress: STAKEHOLDERS[2].walletAddress,
+        location: "FreshMarket Supermarket #104, Westlake Avenue",
+        notes: "Dispatched from warehouse cold room; verified unbroken digital integrity seals"
       }));
     } else if (product.status === "ReceivedByRetailer") {
       setForm((f) => ({
         ...f,
-        receiverAddress: DEMO_PERSONAS[4].address,
-        location: "Checkout Counter #2, FreshMarket Seattle",
-        notes: "Purchased at point-of-sale; digital provenance receipt issued"
+        receiverAddress: STAKEHOLDERS[3].walletAddress,
+        location: "Point-of-Sale Register #4, FreshMarket Seattle",
+        notes: "Scanned and purchased at retail checkout; provenance token transferred to consumer"
       }));
     }
   }, [product?.status]);
@@ -101,18 +81,16 @@ export default function ProductActions() {
       setBusy(true);
       let txHash;
 
-      if (!isDemoMode && window.ethereum) {
-        // Execute real on-chain transaction via MetaMask
+      if (useMetaMaskSigner && window.ethereum) {
         const result = await blockchainCall();
         txHash = result.hash;
       } else {
-        // Deterministic simulated transaction hash for zero-friction review
         txHash = generateSimulatedTxHash();
       }
 
       setHash(txHash);
 
-      const effectiveActor = address || (currentPersona ? currentPersona.address : "0x90f79bf6eb2c4f870365e785982e1f101e93b906");
+      const effectiveActor = address || (user ? user.walletAddress : STAKEHOLDERS[0].walletAddress);
 
       await postAction(apiPath, {
         actorAddress: effectiveActor,
@@ -141,34 +119,22 @@ export default function ProductActions() {
   }
 
   const status = product.status;
-  const activeActorAddress = (address || "").toLowerCase();
+  const userRole = user?.role || 0;
 
-  // In demo mode, allow actions based on the selected demo persona
-  const actionAllowed = isDemoMode
-    ? (status === "Created" && demoRole === 1) ||
-      (status === "DispatchedToDistributor" && demoRole === 2) ||
-      (status === "ReceivedByDistributor" && demoRole === 2) ||
-      (status === "DispatchedToRetailer" && demoRole === 3) ||
-      (status === "ReceivedByRetailer" && demoRole === 3)
-    : (status === "Created" && role === 1 && product.farmer.toLowerCase() === activeActorAddress) ||
-      (status === "DispatchedToDistributor" && role === 2 && product.distributor?.toLowerCase() === activeActorAddress) ||
-      (status === "ReceivedByDistributor" && role === 2 && product.distributor?.toLowerCase() === activeActorAddress) ||
-      (status === "DispatchedToRetailer" && role === 3 && product.retailer?.toLowerCase() === activeActorAddress) ||
-      (status === "ReceivedByRetailer" && role === 3 && product.retailer?.toLowerCase() === activeActorAddress);
-
-  // Helper to suggest correct role
+  // Determine which stakeholder role is required for the next step
   const getRequiredRole = () => {
     switch (status) {
-      case "Created": return { role: 1, name: "Farmer" };
-      case "DispatchedToDistributor": return { role: 2, name: "Distributor" };
-      case "ReceivedByDistributor": return { role: 2, name: "Distributor" };
-      case "DispatchedToRetailer": return { role: 3, name: "Retailer" };
-      case "ReceivedByRetailer": return { role: 3, name: "Retailer" };
+      case "Created": return { role: 1, name: "Farmer", portal: STAKEHOLDERS[0] };
+      case "DispatchedToDistributor": return { role: 2, name: "Distributor", portal: STAKEHOLDERS[1] };
+      case "ReceivedByDistributor": return { role: 2, name: "Distributor", portal: STAKEHOLDERS[1] };
+      case "DispatchedToRetailer": return { role: 3, name: "Retailer", portal: STAKEHOLDERS[2] };
+      case "ReceivedByRetailer": return { role: 3, name: "Retailer", portal: STAKEHOLDERS[2] };
       default: return null;
     }
   };
 
   const req = getRequiredRole();
+  const isAuthorized = req && userRole === req.role;
 
   return (
     <div className="container py-5">
@@ -183,7 +149,7 @@ export default function ProductActions() {
                   {product.cropType || "Produce"}
                 </span>
                 <span className="badge bg-light text-dark border">
-                  Stage: {product.status}
+                  Current Stage: {product.status}
                 </span>
               </div>
               <h2 className="fw-bold mb-1">{product.name}</h2>
@@ -195,7 +161,7 @@ export default function ProductActions() {
 
             <div className="d-flex gap-2">
               <Link to={`/trace/${product.productId}`} className="btn btn-outline-success btn-sm">
-                <i className="bi bi-search me-1"></i>View Trace & QR
+                <i className="bi bi-search me-1"></i>View Trace & QR Badge
               </Link>
             </div>
           </div>
@@ -212,10 +178,10 @@ export default function ProductActions() {
             <div className="agri-card-header bg-light">
               <h5 className="fw-bold mb-0">
                 <i className="bi bi-clock-history text-success me-2"></i>
-                Recorded Supply Chain Journey
+                Custody Chain & Provenance Journey
               </h5>
               <span className="badge bg-light text-muted border">
-                {product.history?.length || 0} Events
+                {product.history?.length || 0} Recorded Handoffs
               </span>
             </div>
             <div className="agri-card-body p-4">
@@ -230,46 +196,50 @@ export default function ProductActions() {
             <div className="agri-card-header bg-light">
               <h5 className="fw-bold mb-0">
                 <i className="bi bi-arrow-right-circle-fill text-success me-2"></i>
-                Custody Handoff Console
+                Handoff Action Console
               </h5>
               <span className="badge bg-dark">
-                {isDemoMode ? `Demo: ${roleNames[demoRole]}` : `Role: ${roleNames[role] || "None"}`}
+                {user ? `${user.avatar} ${user.roleName}` : "Guest"}
               </span>
             </div>
 
             <div className="agri-card-body p-4">
-              {/* Persona Switch Hint if wrong role */}
-              {!actionAllowed && status !== "SoldToConsumer" && req && (
-                <div className="alert alert-warning small mb-3 border">
+              {/* Role Required Alert */}
+              {!isAuthorized && status !== "SoldToConsumer" && req && (
+                <div className="alert alert-warning small mb-4 border">
                   <div className="fw-bold mb-1">
                     <i className="bi bi-exclamation-triangle-fill me-1"></i>
-                    Role Handoff Required
+                    Role Action Required: {req.name}
                   </div>
-                  This batch requires action by a <strong>{req.name}</strong>.
-                  {isDemoMode && (
-                    <div className="mt-2">
-                      <button
-                        className="btn btn-sm btn-dark w-100"
-                        onClick={() => switchDemoRole(req.role)}
-                      >
-                        <i className="bi bi-arrow-repeat me-1"></i>
-                        Switch to {req.name} Persona
-                      </button>
-                    </div>
-                  )}
+                  This stage must be performed by <strong>{req.portal.name} ({req.portal.organization})</strong>.
+                  <div className="mt-2">
+                    <button
+                      className="btn btn-sm btn-dark w-100"
+                      onClick={() => loginAsRole(req.role)}
+                    >
+                      <i className="bi bi-box-arrow-in-right me-1"></i>
+                      Switch to {req.name} Portal ({req.portal.name})
+                    </button>
+                  </div>
                 </div>
               )}
 
               {status === "SoldToConsumer" && (
                 <div className="alert alert-success">
-                  <i className="bi bi-check-circle-fill me-2"></i>
-                  This agricultural batch lifecycle is 100% complete. Provenance verified from farm to consumer.
+                  <i className="bi bi-check-circle-fill me-2 fs-5"></i>
+                  <strong>Lifecycle Complete!</strong> This agricultural batch has been sold to the consumer. Full provenance verified from farm to consumer.
                 </div>
               )}
 
-              {/* Form Controls */}
-              {actionAllowed && (
+              {/* Action Form */}
+              {isAuthorized && (
                 <div>
+                  <div className="p-3 bg-light rounded-3 mb-3 small">
+                    <span className="text-muted d-block" style={{ fontSize: "0.75rem" }}>Acting Stakeholder:</span>
+                    <strong className="text-dark fs-6">{user.avatar} {user.name}</strong>
+                    <div className="text-muted">{user.organization}</div>
+                  </div>
+
                   <div className="mb-3">
                     <label className="form-label small fw-semibold">Action Date *</label>
                     <input
@@ -282,7 +252,7 @@ export default function ProductActions() {
                   </div>
 
                   <div className="mb-3">
-                    <label className="form-label small fw-semibold">Handoff Location / Facility</label>
+                    <label className="form-label small fw-semibold">Handoff Facility / Location *</label>
                     <input
                       type="text"
                       className="form-control"
@@ -294,13 +264,13 @@ export default function ProductActions() {
                   </div>
 
                   <div className="mb-3">
-                    <label className="form-label small fw-semibold">Transit & Condition Notes</label>
+                    <label className="form-label small fw-semibold">Cold-Chain & Telemetry Notes</label>
                     <input
                       type="text"
                       className="form-control"
                       value={form.notes}
                       disabled={busy}
-                      placeholder="e.g. Temperature checked: 3.8°C; seals verified"
+                      placeholder="e.g. Temp verified at 3.5°C, unbroken digital seal"
                       onChange={(e) => setForm({ ...form, notes: e.target.value })}
                     />
                   </div>
@@ -308,13 +278,16 @@ export default function ProductActions() {
                   {/* 1. Farmer Dispatch to Distributor */}
                   {status === "Created" && (
                     <div className="border-top pt-3">
-                      <label className="form-label small fw-semibold">Designated Distributor Wallet Address *</label>
-                      <input
-                        className="form-control font-monospace small mb-3"
-                        placeholder="0x..."
+                      <label className="form-label small fw-semibold">Designated Cold-Chain Distributor *</label>
+                      <select
+                        className="form-select mb-3"
                         value={form.receiverAddress}
                         onChange={(e) => setForm({ ...form, receiverAddress: e.target.value })}
-                      />
+                      >
+                        <option value={STAKEHOLDERS[1].walletAddress}>
+                          🚚 {STAKEHOLDERS[1].name} — {STAKEHOLDERS[1].organization}
+                        </option>
+                      </select>
                       <button
                         className="btn btn-success w-100 fw-semibold"
                         disabled={busy || !form.receiverAddress}
@@ -324,7 +297,7 @@ export default function ProductActions() {
                           form.receiverAddress
                         )}
                       >
-                        {busy ? "Processing..." : "Dispatch to Distributor"}
+                        {busy ? "Signing to Ledger..." : "Dispatch Freight to Distributor"}
                       </button>
                     </div>
                   )}
@@ -333,7 +306,7 @@ export default function ProductActions() {
                   {status === "DispatchedToDistributor" && (
                     <div className="border-top pt-3">
                       <p className="small text-secondary mb-3">
-                        Confirming receipt of batch at distributor hub. Verifies integrity of origin seals.
+                        Acknowledge inbound freight arrival at the cold storage facility. Verifies origin temperature seals.
                       </p>
                       <button
                         className="btn btn-success w-100 fw-semibold"
@@ -343,7 +316,7 @@ export default function ProductActions() {
                           `/products/${product.productId}/receive-distributor`
                         )}
                       >
-                        {busy ? "Processing..." : "Acknowledge Receipt from Farmer"}
+                        {busy ? "Signing to Ledger..." : "Acknowledge Receipt from Farmer"}
                       </button>
                     </div>
                   )}
@@ -351,13 +324,16 @@ export default function ProductActions() {
                   {/* 3. Distributor Dispatch to Retailer */}
                   {status === "ReceivedByDistributor" && (
                     <div className="border-top pt-3">
-                      <label className="form-label small fw-semibold">Designated Retailer Wallet Address *</label>
-                      <input
-                        className="form-control font-monospace small mb-3"
-                        placeholder="0x..."
+                      <label className="form-label small fw-semibold">Designated Retail Supermarket *</label>
+                      <select
+                        className="form-select mb-3"
                         value={form.receiverAddress}
                         onChange={(e) => setForm({ ...form, receiverAddress: e.target.value })}
-                      />
+                      >
+                        <option value={STAKEHOLDERS[2].walletAddress}>
+                          🏪 {STAKEHOLDERS[2].name} — {STAKEHOLDERS[2].organization}
+                        </option>
+                      </select>
                       <button
                         className="btn btn-success w-100 fw-semibold"
                         disabled={busy || !form.receiverAddress}
@@ -367,7 +343,7 @@ export default function ProductActions() {
                           form.receiverAddress
                         )}
                       >
-                        {busy ? "Processing..." : "Dispatch to Retail Store"}
+                        {busy ? "Signing to Ledger..." : "Dispatch to Retail Store"}
                       </button>
                     </div>
                   )}
@@ -376,7 +352,7 @@ export default function ProductActions() {
                   {status === "DispatchedToRetailer" && (
                     <div className="border-top pt-3">
                       <p className="small text-secondary mb-3">
-                        Acknowledge receipt and stocking on retail grocery shelf.
+                        Confirm delivery at retail loading dock and stock product onto store shelves.
                       </p>
                       <button
                         className="btn btn-success w-100 fw-semibold"
@@ -386,7 +362,7 @@ export default function ProductActions() {
                           `/products/${product.productId}/receive-retailer`
                         )}
                       >
-                        {busy ? "Processing..." : "Receive & Stock on Shelf"}
+                        {busy ? "Signing to Ledger..." : "Receive & Stock on Retail Shelves"}
                       </button>
                     </div>
                   )}
@@ -394,13 +370,16 @@ export default function ProductActions() {
                   {/* 5. Retailer Sell to Consumer */}
                   {status === "ReceivedByRetailer" && (
                     <div className="border-top pt-3">
-                      <label className="form-label small fw-semibold">Consumer Wallet Address *</label>
-                      <input
-                        className="form-control font-monospace small mb-3"
-                        placeholder="0x..."
+                      <label className="form-label small fw-semibold">Purchasing Customer / Consumer *</label>
+                      <select
+                        className="form-select mb-3"
                         value={form.receiverAddress}
                         onChange={(e) => setForm({ ...form, receiverAddress: e.target.value })}
-                      />
+                      >
+                        <option value={STAKEHOLDERS[3].walletAddress}>
+                          👤 {STAKEHOLDERS[3].name} — {STAKEHOLDERS[3].organization}
+                        </option>
+                      </select>
                       <button
                         className="btn btn-success w-100 fw-semibold"
                         disabled={busy || !form.receiverAddress}
@@ -410,7 +389,7 @@ export default function ProductActions() {
                           form.receiverAddress
                         )}
                       >
-                        {busy ? "Processing..." : "Record Sale to Consumer"}
+                        {busy ? "Signing to Ledger..." : "Record Point-of-Sale Checkout"}
                       </button>
                     </div>
                   )}

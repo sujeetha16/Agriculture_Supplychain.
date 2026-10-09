@@ -2,19 +2,18 @@
 import React from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useWallet } from "../context/WalletContext";
-import { DEMO_PERSONAS } from "../services/blockchain";
 
 export default function Layout({ children }) {
   const {
-    address,
+    user,
+    isAuthenticated,
+    logout,
+    loginAsRole,
+    allStakeholders,
     isSepolia,
-    connecting,
-    connect,
-    disconnect,
-    isDemoMode,
-    demoRole,
-    switchDemoRole,
-    setIsDemoMode,
+    useMetaMaskSigner,
+    setUseMetaMaskSigner,
+    connectMetaMask,
     hasMetaMask
   } = useWallet();
 
@@ -22,52 +21,52 @@ export default function Layout({ children }) {
 
   return (
     <div className="d-flex flex-column min-vh-100">
-      {/* Interactive Presentation Persona Strip */}
+      {/* Interactive Quick Portal Switcher Strip */}
       <div className="persona-strip">
         <div className="container d-flex flex-wrap align-items-center justify-content-between gap-2">
           <div className="d-flex align-items-center gap-2">
             <span className="badge bg-dark border border-secondary text-light">
-              <i className="bi bi-sliders me-1"></i>Demo Role Simulation:
+              <i className="bi bi-person-badge-fill me-1"></i>Active Stakeholder Portal:
             </span>
             <div className="d-flex flex-wrap gap-1">
-              {Object.values(DEMO_PERSONAS).map((p) => (
+              {allStakeholders.map((s) => (
                 <button
-                  key={p.role}
+                  key={s.role}
                   type="button"
-                  className={`persona-badge ${isDemoMode && demoRole === p.role ? "active" : ""}`}
-                  onClick={() => switchDemoRole(p.role)}
-                  title={`Simulate ${p.roleName} wallet (${p.address})`}
+                  className={`persona-badge ${user?.role === s.role ? "active" : ""}`}
+                  onClick={() => loginAsRole(s.role)}
+                  title={`Switch to ${s.name} (${s.organization})`}
                 >
-                  <i className={`bi ${p.icon}`}></i>
-                  <span>{p.roleName}</span>
+                  <span className="me-1">{s.avatar}</span>
+                  <span>{s.roleName}</span>
                 </button>
               ))}
             </div>
           </div>
 
           <div className="d-flex align-items-center gap-2 small">
-            {isDemoMode ? (
+            {user ? (
               <span className="badge bg-success-subtle text-success border border-success-subtle">
-                <i className="bi bi-lightning-charge-fill me-1"></i>Simulation Mode Active
+                <i className="bi bi-check-circle-fill me-1"></i>Signed in as {user.name}
               </span>
             ) : (
-              <span className={`badge ${isSepolia ? "bg-success" : "bg-warning text-dark"}`}>
-                <i className="bi bi-record-circle me-1"></i>
-                {isSepolia ? "Sepolia Live" : "Wrong Network"}
-              </span>
+              <Link to="/login" className="btn btn-sm btn-link text-white text-decoration-none p-0">
+                Sign In to Portal
+              </Link>
             )}
+
             {hasMetaMask && (
               <button
                 className="btn btn-sm btn-link text-white-50 text-decoration-none p-0 ms-2"
                 onClick={() => {
-                  if (isDemoMode) {
-                    connect();
+                  if (useMetaMaskSigner) {
+                    setUseMetaMaskSigner(false);
                   } else {
-                    disconnect();
+                    connectMetaMask();
                   }
                 }}
               >
-                {isDemoMode ? "Switch to MetaMask" : "Switch to Demo Mode"}
+                {useMetaMaskSigner ? "Disconnect MetaMask" : "Connect MetaMask (Sepolia)"}
               </button>
             )}
           </div>
@@ -113,31 +112,56 @@ export default function Layout({ children }) {
             </div>
 
             <div className="d-flex align-items-center gap-2 mt-3 mt-lg-0">
-              {address ? (
+              {user ? (
                 <div className="dropdown">
                   <button
-                    className="btn btn-outline-light btn-sm d-flex align-items-center gap-2 rounded-pill px-3"
+                    className="btn btn-outline-light btn-sm d-flex align-items-center gap-2 rounded-pill px-3 dropdown-toggle"
                     type="button"
                     data-bs-toggle="dropdown"
-                    title={address}
+                    aria-expanded="false"
                   >
-                    <span className="badge rounded-pill bg-success p-1">
-                      <span className="visually-hidden">Active</span>
-                    </span>
-                    <span className="font-monospace small">
-                      {address.slice(0, 6)}...{address.slice(-4)}
+                    <span>{user.avatar}</span>
+                    <span className="fw-semibold small">{user.name}</span>
+                    <span className="badge bg-success bg-opacity-25 text-white small">
+                      {user.roleName}
                     </span>
                   </button>
+                  <ul className="dropdown-menu dropdown-menu-end shadow border-0 mt-2">
+                    <li className="px-3 py-2 border-bottom">
+                      <div className="fw-bold text-dark">{user.name}</div>
+                      <div className="small text-muted">{user.organization}</div>
+                      <div className="small text-muted">{user.location}</div>
+                    </li>
+                    <li><h6 className="dropdown-header small text-uppercase">Switch Portal Role</h6></li>
+                    {allStakeholders.map((s) => (
+                      <li key={s.id}>
+                        <button
+                          className={`dropdown-item small d-flex align-items-center gap-2 ${user.id === s.id ? "active bg-success" : ""}`}
+                          onClick={() => loginAsRole(s.role)}
+                        >
+                          <span>{s.avatar}</span>
+                          <span>{s.name} ({s.roleName})</span>
+                        </button>
+                      </li>
+                    ))}
+                    <li><hr className="dropdown-divider" /></li>
+                    <li>
+                      <button
+                        className="dropdown-item small text-danger"
+                        onClick={() => {
+                          logout();
+                          navigate("/login");
+                        }}
+                      >
+                        <i className="bi bi-box-arrow-right me-2"></i>Sign Out
+                      </button>
+                    </li>
+                  </ul>
                 </div>
               ) : (
-                <button
-                  className="btn btn-success btn-sm rounded-pill px-3"
-                  onClick={connect}
-                  disabled={connecting}
-                >
-                  <i className="bi bi-wallet2 me-1"></i>
-                  {connecting ? "Connecting..." : "Connect MetaMask"}
-                </button>
+                <Link to="/login" className="btn btn-success btn-sm rounded-pill px-3">
+                  <i className="bi bi-box-arrow-in-right me-1"></i>Sign In to Portal
+                </Link>
               )}
             </div>
           </div>
@@ -183,7 +207,7 @@ export default function Layout({ children }) {
                 Designed for University Cloud Computing Review
               </div>
               <div className="small text-secondary mt-1">
-                Contract: <a href="https://sepolia.etherscan.io/address/0xB601FDccec475b61B8Bc9f3661eC4F73B7499a2D" target="_blank" rel="noreferrer" className="font-monospace text-decoration-underline text-success">0xB601...9a2D</a>
+                Smart Contract: <a href="https://sepolia.etherscan.io/address/0xB601FDccec475b61B8Bc9f3661eC4F73B7499a2D" target="_blank" rel="noreferrer" className="font-monospace text-decoration-underline text-success">0xB601...9a2D</a>
               </div>
             </div>
           </div>

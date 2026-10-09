@@ -8,7 +8,7 @@ import { createProduct } from "../services/api";
 import { useWallet } from "../context/WalletContext";
 
 export default function FarmerAddProduct() {
-  const { address, isDemoMode, currentPersona } = useWallet();
+  const { address, isDemoMode, currentPersona, user } = useWallet();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -231,8 +231,11 @@ export default function FarmerAddProduct() {
                 </div>
 
                 <div className="mt-4 pt-3 border-top d-flex align-items-center justify-content-between flex-wrap gap-2">
-                  <div className="small text-muted">
-                    Signer Account: <span className="font-monospace text-dark">{address ? `${address.slice(0, 10)}...${address.slice(-6)}` : "Demo Farmer"}</span>
+                  <div className="small text-muted d-flex align-items-center gap-2">
+                    <span>Authorized Farmer:</span>
+                    <span className="badge bg-success bg-opacity-10 text-success border border-success-subtle fw-semibold">
+                      {user?.avatar || "👨‍🌾"} {user?.name || "John Vance"} • {user?.organization || "Green Valley Organic Farms"}
+                    </span>
                   </div>
 
                   <button

@@ -6,6 +6,7 @@ const express = require("express");
 const cors = require("cors");
 const { connectDB, isMongoConnected } = require("./config/db");
 const productRoutes = require("./routes/products");
+const { router: authRoutes } = require("./routes/auth");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
@@ -35,6 +36,7 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 
 app.use(notFound);

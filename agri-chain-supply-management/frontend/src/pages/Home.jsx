@@ -113,13 +113,16 @@ export default function Home() {
             }
           ].map((item) => (
             <div className="col-md-6 col-lg-3" key={item.role}>
-              <div className="agri-card h-100 p-4">
+              <div className="agri-card h-100 p-4 d-flex flex-column">
                 <div className="kpi-icon-wrapper bg-success-subtle text-success mb-3">
                   <i className={`bi ${item.icon} fs-4`}></i>
                 </div>
-                <span className="badge bg-light text-dark border mb-2">{item.role}</span>
+                <span className="badge bg-light text-dark border mb-2 align-self-start">{item.role}</span>
                 <h5 className="fw-bold mb-2">{item.title}</h5>
-                <p className="text-secondary small mb-0">{item.desc}</p>
+                <p className="text-secondary small mb-3 flex-grow-1">{item.desc}</p>
+                <Link to="/login" className="btn btn-outline-success btn-sm w-100 fw-semibold">
+                  Enter Portal <i className="bi bi-box-arrow-in-right ms-1"></i>
+                </Link>
               </div>
             </div>
           ))}

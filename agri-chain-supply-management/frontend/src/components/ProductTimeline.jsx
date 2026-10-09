@@ -1,5 +1,6 @@
 // Path: frontend/src/components/ProductTimeline.jsx
 import React from "react";
+import { resolveStakeholder } from "../services/stakeholders";
 
 const STAGES = [
   {
@@ -53,6 +54,9 @@ export default function ProductTimeline({ product }) {
         const event = historyMap[stage.action];
         const isDone = Boolean(event);
 
+        const actor = event ? resolveStakeholder(event.actorAddress) : null;
+        const receiver = event && event.receiverAddress ? resolveStakeholder(event.receiverAddress) : null;
+
         return (
           <div
             className={`agri-timeline-item ${isDone ? "done" : ""}`}
@@ -83,42 +87,66 @@ export default function ProductTimeline({ product }) {
               <p className="text-secondary small mb-2">{stage.desc}</p>
 
               {isDone ? (
-                <div className="p-2 bg-light rounded border border-light-subtle small mt-2">
-                  <div className="row g-1 text-secondary">
+                <div className="p-3 bg-light rounded-3 border border-light-subtle small mt-2">
+                  <div className="row g-2 text-secondary">
                     <div className="col-sm-6">
-                      <span className="d-block text-muted" style={{ fontSize: "0.75rem" }}>Signer Actor:</span>
-                      <span className="text-break-address font-monospace text-dark">
-                        {event.actorAddress}
+                      <span className="d-block text-muted" style={{ fontSize: "0.75rem" }}>
+                        Signer Stakeholder:
                       </span>
+                      <div className="fw-bold text-dark">
+                        {actor ? (
+                          <>
+                            <span className="me-1">{actor.avatar}</span>
+                            <span>{actor.name}</span>
+                            <span className="badge bg-light text-secondary border ms-2 small">
+                              {actor.organization}
+                            </span>
+                          </>
+                        ) : (
+                          event.actorAddress
+                        )}
+                      </div>
                     </div>
 
                     {event.receiverAddress && (
                       <div className="col-sm-6">
-                        <span className="d-block text-muted" style={{ fontSize: "0.75rem" }}>Designated Receiver:</span>
-                        <span className="text-break-address font-monospace text-dark">
-                          {event.receiverAddress}
+                        <span className="d-block text-muted" style={{ fontSize: "0.75rem" }}>
+                          Designated Receiver:
                         </span>
+                        <div className="fw-bold text-dark">
+                          {receiver ? (
+                            <>
+                              <span className="me-1">{receiver.avatar}</span>
+                              <span>{receiver.name}</span>
+                              <span className="badge bg-light text-secondary border ms-2 small">
+                                {receiver.organization}
+                              </span>
+                            </>
+                          ) : (
+                            event.receiverAddress
+                          )}
+                        </div>
                       </div>
                     )}
 
                     {event.location && (
                       <div className="col-12 mt-1">
-                        <span className="text-muted">Location: </span>
+                        <span className="text-muted">Facility / Location: </span>
                         <span className="text-dark fw-medium">{event.location}</span>
                       </div>
                     )}
 
                     {event.notes && (
                       <div className="col-12 mt-1">
-                        <span className="text-muted">Transit Notes: </span>
+                        <span className="text-muted">Custody & Telemetry Log: </span>
                         <span className="text-dark fst-italic">{event.notes}</span>
                       </div>
                     )}
 
-                    <div className="col-12 mt-2 pt-1 border-top">
+                    <div className="col-12 mt-2 pt-2 border-top">
                       <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
                         <span className="text-muted" style={{ fontSize: "0.75rem" }}>
-                          <i className="bi bi-link-45deg me-1"></i>On-Chain Transaction:
+                          <i className="bi bi-shield-check text-success me-1"></i>Cryptographic Ethereum Proof:
                         </span>
                         <a
                           href={`https://sepolia.etherscan.io/tx/${event.txHash}`}
@@ -126,7 +154,7 @@ export default function ProductTimeline({ product }) {
                           rel="noreferrer"
                           className="font-monospace text-decoration-none text-success small fw-semibold"
                         >
-                          {event.txHash.slice(0, 10)}...{event.txHash.slice(-8)}{" "}
+                          TX {event.txHash.slice(0, 10)}...{event.txHash.slice(-8)}{" "}
                           <i className="bi bi-box-arrow-up-right ms-1"></i>
                         </a>
                       </div>
