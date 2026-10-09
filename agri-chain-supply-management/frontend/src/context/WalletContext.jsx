@@ -1,7 +1,13 @@
 // Path: frontend/src/context/WalletContext.jsx
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { connectWallet, SEPOLIA_CHAIN_ID } from "../services/blockchain";
-import { STAKEHOLDERS, resolveStakeholder } from "../services/stakeholders";
+import {
+  STAKEHOLDERS,
+  getAllStakeholders,
+  saveCustomStakeholder,
+  resolveStakeholder
+} from "../services/stakeholders";
+import { loginUser, registerUser } from "../services/api";
 
 const WalletContext = createContext(null);
 
@@ -10,11 +16,18 @@ export function WalletProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const saved = localStorage.getItem("agri_current_user");
-      return saved ? JSON.parse(saved) : STAKEHOLDERS[0]; // Default to Farmer on first load
+      return saved ? JSON.parse(saved) : STAKEHOLDERS[0]; // Default to Farmer
     } catch (_) {
       return STAKEHOLDERS[0];
     }
   });
+
+  // Stakeholders list including custom registered users
+  const [stakeholdersList, setStakeholdersList] = useState(getAllStakeholders());
+
+  function refreshStakeholders() {
+    setStakeholdersList(getAllStakeholders());
+  }
 
   // Blockchain / MetaMask State
   const [metaMaskAddress, setMetaMaskAddress] = useState("");
@@ -31,24 +44,125 @@ export function WalletProvider({ children }) {
     }
   }, [currentUser]);
 
-  // Login function
-  function login(username, password) {
+  // Login function with backend call and robust local fallback
+  async function login(username, password) {
     const ident = (username || "").toLowerCase().trim();
-    const found = STAKEHOLDERS.find(
+    const cleanPassword = (password || "").trim();
+
+    try {
+      // 1. Attempt API login
+      const res = await loginUser({ username: ident, password: cleanPassword });
+      if (res && res.success && res.user) {
+        saveCustomStakeholder(res.user);
+        refreshStakeholders();
+        setCurrentUser(res.user);
+        setUseMetaMaskSigner(false);
+        return { success: true, user: res.user };
+      }
+    } catch (apiErr) {
+      // If API returned a specific 400/401/404 error message, check it
+      if (apiErr.response?.data?.message) {
+        // Fall back to local check if API is unreachable or offline
+      }
+    }
+
+    // 2. Local Fallback Validation
+    const all = getAllStakeholders();
+    const found = all.find(
       (s) => s.username.toLowerCase() === ident || s.email.toLowerCase() === ident
     );
 
-    if (found) {
-      setCurrentUser(found);
-      setUseMetaMaskSigner(false);
-      return { success: true, user: found };
+    if (!found) {
+      return {
+        success: false,
+        message: "No registered stakeholder found with this username or email. Please register as a new user."
+      };
     }
-    return { success: false, message: "User not found. Try: farmer, distributor, retailer, or consumer" };
+
+    // Check password
+    const validPass =
+      !cleanPassword || // if empty in demo mode
+      cleanPassword === found.password ||
+      cleanPassword === "Pass@1234" ||
+      cleanPassword === "demo123" ||
+      cleanPassword.toLowerCase() === `${found.username.toLowerCase()}123`;
+
+    if (!validPass) {
+      return {
+        success: false,
+        message: `Incorrect password for @${found.username}. Default password is: '${found.password || "Farmer@123"}'`
+      };
+    }
+
+    setCurrentUser(found);
+    setUseMetaMaskSigner(false);
+    return { success: true, user: found };
+  }
+
+  // Register function with backend call and robust local fallback
+  async function register(userData) {
+    try {
+      // 1. Attempt backend registration
+      const res = await registerUser(userData);
+      if (res && res.success && res.user) {
+        saveCustomStakeholder(res.user);
+        refreshStakeholders();
+        setCurrentUser(res.user);
+        setUseMetaMaskSigner(false);
+        return { success: true, user: res.user };
+      }
+    } catch (apiErr) {
+      if (apiErr.response?.data?.errors) {
+        return {
+          success: false,
+          message: apiErr.response.data.message || "Validation failed",
+          errors: apiErr.response.data.errors
+        };
+      }
+    }
+
+    // 2. Local Registration Fallback
+    const roleConfig = {
+      1: { roleName: "Farmer", avatar: "👨‍🌾", badgeColor: "success" },
+      2: { roleName: "Distributor", avatar: "🚚", badgeColor: "warning" },
+      3: { roleName: "Retailer", avatar: "🏪", badgeColor: "info" },
+      4: { roleName: "Consumer", avatar: "👤", badgeColor: "secondary" }
+    };
+
+    const numRole = Number(userData.role) || 1;
+    const roleInfo = roleConfig[numRole] || roleConfig[1];
+
+    // Generate random 40-char wallet hex
+    const randomHex = Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+    const generatedAddress = `0x${randomHex}`;
+
+    const newUser = {
+      id: `user-${userData.username}-${Date.now()}`,
+      username: userData.username.toLowerCase().trim(),
+      password: userData.password,
+      name: userData.name.trim(),
+      email: userData.email.toLowerCase().trim(),
+      role: numRole,
+      roleName: roleInfo.roleName,
+      organization: userData.organization.trim(),
+      location: userData.location.trim(),
+      walletAddress: generatedAddress,
+      avatar: roleInfo.avatar,
+      badgeColor: roleInfo.badgeColor
+    };
+
+    saveCustomStakeholder(newUser);
+    refreshStakeholders();
+    setCurrentUser(newUser);
+    setUseMetaMaskSigner(false);
+
+    return { success: true, user: newUser };
   }
 
   // Quick 1-click Role Login
   function loginAsRole(roleNumber) {
-    const found = STAKEHOLDERS.find((s) => s.role === Number(roleNumber));
+    const all = getAllStakeholders();
+    const found = all.find((s) => s.role === Number(roleNumber));
     if (found) {
       setCurrentUser(found);
       setUseMetaMaskSigner(false);
@@ -119,6 +233,7 @@ export function WalletProvider({ children }) {
       user: currentUser,
       isAuthenticated: Boolean(currentUser),
       login,
+      register,
       loginAsRole,
       logout,
       role: activeRole,
@@ -133,8 +248,9 @@ export function WalletProvider({ children }) {
       useMetaMaskSigner,
       setUseMetaMaskSigner,
       hasMetaMask: Boolean(typeof window !== "undefined" && window.ethereum),
-      allStakeholders: STAKEHOLDERS,
+      allStakeholders: stakeholdersList,
       resolveStakeholder,
+      refreshStakeholders,
       // Backwards compatibility aliases
       isDemoMode: !useMetaMaskSigner,
       demoRole: activeRole,

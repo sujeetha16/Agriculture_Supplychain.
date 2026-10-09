@@ -4,6 +4,7 @@ export const STAKEHOLDERS = [
   {
     id: "user-farmer",
     username: "farmer",
+    password: "Farmer@123",
     name: "John Vance",
     organization: "Green Valley Organic Farms",
     role: 1,
@@ -17,6 +18,7 @@ export const STAKEHOLDERS = [
   {
     id: "user-distributor",
     username: "distributor",
+    password: "Distributor@123",
     name: "Marcus Brody",
     organization: "Pacific Cold-Chain Logistics Hub",
     role: 2,
@@ -30,6 +32,7 @@ export const STAKEHOLDERS = [
   {
     id: "user-retailer",
     username: "retailer",
+    password: "Retailer@123",
     name: "Sarah Jenkins",
     organization: "FreshMarket Supermarket #104",
     role: 3,
@@ -43,6 +46,7 @@ export const STAKEHOLDERS = [
   {
     id: "user-consumer",
     username: "consumer",
+    password: "Consumer@123",
     name: "Alice Chen",
     organization: "Verified Consumer Member",
     role: 4,
@@ -56,13 +60,49 @@ export const STAKEHOLDERS = [
 ];
 
 /**
+ * Returns all predefined plus newly registered custom stakeholders
+ */
+export function getAllStakeholders() {
+  try {
+    const raw = localStorage.getItem("agri_custom_users");
+    const custom = raw ? JSON.parse(raw) : [];
+    // Deduplicate against STAKEHOLDERS by id or username
+    const combined = [...STAKEHOLDERS];
+    custom.forEach((c) => {
+      if (!combined.some((item) => item.username.toLowerCase() === c.username.toLowerCase())) {
+        combined.push(c);
+      }
+    });
+    return combined;
+  } catch (_) {
+    return STAKEHOLDERS;
+  }
+}
+
+/**
+ * Persists a newly registered stakeholder into local storage cache
+ */
+export function saveCustomStakeholder(newUser) {
+  try {
+    const raw = localStorage.getItem("agri_custom_users");
+    const list = raw ? JSON.parse(raw) : [];
+    const exists = list.some((u) => u.username.toLowerCase() === newUser.username.toLowerCase());
+    if (!exists) {
+      list.push(newUser);
+      localStorage.setItem("agri_custom_users", JSON.stringify(list));
+    }
+  } catch (_) {}
+}
+
+/**
  * Resolves any raw 0x... Ethereum address or username to a human-readable stakeholder profile.
  */
 export function resolveStakeholder(addressOrUsername) {
   if (!addressOrUsername) return null;
   const target = String(addressOrUsername).toLowerCase().trim();
+  const all = getAllStakeholders();
 
-  const found = STAKEHOLDERS.find(
+  const found = all.find(
     (s) =>
       s.walletAddress.toLowerCase() === target ||
       s.username.toLowerCase() === target ||
@@ -83,7 +123,7 @@ export function resolveStakeholder(addressOrUsername) {
 }
 
 /**
- * Formats an actor for display: e.g. "John Vance (Green Valley Organics)"
+ * Formats an actor for display: e.g. "John Vance • Green Valley Organic Farms"
  */
 export function formatActorDisplay(addressOrUsername) {
   const s = resolveStakeholder(addressOrUsername);

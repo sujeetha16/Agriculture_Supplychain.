@@ -6,6 +6,16 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" }
 });
 
+export async function loginUser(credentials) {
+  const { data } = await api.post("/auth/login", credentials);
+  return data;
+}
+
+export async function registerUser(userData) {
+  const { data } = await api.post("/auth/register", userData);
+  return data;
+}
+
 export async function getProducts() {
   const { data } = await api.get("/products");
   return data.products;
