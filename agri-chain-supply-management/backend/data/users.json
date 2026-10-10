@@ -1,0 +1,98 @@
+[
+  {
+    "id": "user-farmer",
+    "username": "farmer",
+    "email": "john.vance@greenvalleyfarms.com",
+    "name": "John Vance",
+    "organization": "Green Valley Organic Farms",
+    "role": 1,
+    "roleName": "Farmer",
+    "location": "Yakima Valley, Washington",
+    "phone": "+1 (509) 555-0142",
+    "walletAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+    "avatar": "👨‍🌾",
+    "badgeColor": "success",
+    "verifiedCertifications": [
+      "USDA Organic",
+      "GlobalG.A.P.",
+      "Non-GMO"
+    ],
+    "password": "$2b$10$HgzAUYhbXGf6JOH0Ja2IUe2FBu4ut5CuBx4I..2uxM.axJLvCtFtS"
+  },
+  {
+    "id": "user-distributor",
+    "username": "distributor",
+    "email": "marcus.brody@pacificcoldchain.com",
+    "name": "Marcus Brody",
+    "organization": "Pacific Cold-Chain Logistics Hub",
+    "role": 2,
+    "roleName": "Distributor",
+    "location": "Seattle Regional Logistics Hub, WA",
+    "phone": "+1 (206) 555-0188",
+    "walletAddress": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+    "avatar": "🚚",
+    "badgeColor": "warning",
+    "verifiedCertifications": [
+      "HACCP Certified",
+      "ISO 22000 Cold Chain"
+    ],
+    "password": "$2b$10$NCPkjs0zLDNQCT8SsCpUue.H.gxoqaO6VEp2aSMrYeJ3JtkA/DhQS"
+  },
+  {
+    "id": "user-retailer",
+    "username": "retailer",
+    "email": "sarah.jenkins@freshmarketorganics.com",
+    "name": "Sarah Jenkins",
+    "organization": "FreshMarket Supermarket #104",
+    "role": 3,
+    "roleName": "Retailer",
+    "location": "Downtown Westlake Store, Seattle",
+    "phone": "+1 (206) 555-0199",
+    "walletAddress": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4df",
+    "avatar": "🏪",
+    "badgeColor": "info",
+    "verifiedCertifications": [
+      "Certified Organic Retailer",
+      "Fair Trade Partner"
+    ],
+    "password": "$2b$10$kwAn4hqkpbjXzzwlQIJlaehKySd18h4A1WY81cRZMqf.ZFIn9cHYG"
+  },
+  {
+    "id": "user-consumer",
+    "username": "consumer",
+    "email": "alice.chen@gmail.com",
+    "name": "Alice Chen",
+    "organization": "Verified Consumer Member",
+    "role": 4,
+    "roleName": "Consumer",
+    "location": "Seattle, WA",
+    "phone": "+1 (206) 555-0123",
+    "walletAddress": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+    "avatar": "👤",
+    "badgeColor": "secondary",
+    "verifiedCertifications": [
+      "Eco-Shopper Verified"
+    ],
+    "password": "$2b$10$7p.HVf515z/GA1Bek3KB1OWYaS1BHBPDn3N7iT.gaGskRZtc62B6K"
+  },
+  {
+    "id": "user-tfarm_18937558-1791618937914",
+    "name": "Test Certified Farmer",
+    "username": "tfarm_18937558",
+    "email": "tfarm_18937558@agrifarm.test",
+    "password": "$2b$10$1WI4f/OTrBL/ftDw6xT1EuXH1/zoWKIZHr/t9jhO3x1ju6OiGPpKe",
+    "role": 1,
+    "roleName": "Farmer",
+    "organization": "Cascade Valley Organic Cooperative",
+    "location": "Wenatchee, WA",
+    "phone": "+1 509-555-9876",
+    "walletAddress": "0xc6d9c4b471413d6394792263cb0d3287733e7318",
+    "avatar": "👨‍🌾",
+    "badgeColor": "success",
+    "verifiedCertifications": [
+      "Self-Declared Stakeholder"
+    ],
+    "createdAt": "2026-10-10T07:55:37.914Z",
+    "updatedAt": "2026-10-10T07:55:37.914Z"
+  }
+]

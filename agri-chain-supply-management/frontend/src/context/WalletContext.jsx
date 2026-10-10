@@ -173,6 +173,10 @@ export function WalletProvider({ children }) {
 
   // Logout function
   function logout() {
+    try {
+      localStorage.removeItem("agri_token");
+      localStorage.removeItem("agri_current_user");
+    } catch (_) {}
     setCurrentUser(null);
     setUseMetaMaskSigner(false);
   }

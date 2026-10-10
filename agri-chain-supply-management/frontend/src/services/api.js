@@ -6,14 +6,36 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" }
 });
 
+// Automatically inject JWT authentication header
+api.interceptors.request.use((config) => {
+  try {
+    const token = localStorage.getItem("agri_token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  } catch (_) {}
+  return config;
+});
+
 export async function loginUser(credentials) {
   const { data } = await api.post("/auth/login", credentials);
+  if (data && data.token) {
+    localStorage.setItem("agri_token", data.token);
+  }
   return data;
 }
 
 export async function registerUser(userData) {
   const { data } = await api.post("/auth/register", userData);
+  if (data && data.token) {
+    localStorage.setItem("agri_token", data.token);
+  }
   return data;
+}
+
+export function logoutUser() {
+  localStorage.removeItem("agri_token");
+  localStorage.removeItem("agri_current_user");
 }
 
 export async function getProducts() {
@@ -29,6 +51,11 @@ export async function getStats() {
 export async function getProduct(productId) {
   const { data } = await api.get(`/products/${productId}`);
   return data.product;
+}
+
+export async function verifyProductProof(productId) {
+  const { data } = await api.get(`/products/${productId}/verify`);
+  return data;
 }
 
 export async function getProductsByWallet(address) {

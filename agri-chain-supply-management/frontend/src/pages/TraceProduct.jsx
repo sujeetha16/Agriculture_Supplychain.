@@ -150,33 +150,79 @@ export default function TraceProduct() {
           {/* Product Overview Card & Verification Status */}
           {product && (
             <>
-              {/* Verification Callout */}
-              <div className={`alert ${verified ? "alert-success" : "alert-info"} border shadow-sm d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4`}>
-                <div className="d-flex align-items-center gap-2">
-                  <i className={`bi ${verified ? "bi-patch-check-fill text-success" : "bi-info-circle-fill text-primary"} fs-4`}></i>
-                  <div>
-                    <strong>
-                      {verified
-                        ? "Cryptographically Verified on Ethereum Sepolia Ledger"
-                        : "Verified by Supply Chain Relational Storage Mirror"}
-                    </strong>
-                    <div className="small text-muted">
-                      Batch #{product.productId} has {product.history?.length || 0} recorded custody state transitions.
-                    </div>
-                  </div>
-                </div>
+              {/* Cryptographic Verification Status Callout */}
+              {(() => {
+                const isSimulated = product.isSimulated || product.verificationStatus === "SIMULATED_DEMO" || product.qrBlockchainHash?.startsWith("0xsim-");
+                const isConfirmedOnChain = (verified || product.verificationStatus === "VERIFIED_ON_CHAIN") && !isSimulated;
 
-                {product.qrBlockchainHash && (
-                  <a
-                    href={`https://sepolia.etherscan.io/tx/${product.qrBlockchainHash}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn btn-sm btn-outline-dark font-monospace"
-                  >
-                    Genesis TX <i className="bi bi-box-arrow-up-right ms-1"></i>
-                  </a>
-                )}
-              </div>
+                if (isConfirmedOnChain) {
+                  return (
+                    <div className="alert alert-success border border-success-subtle shadow-sm d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
+                      <div className="d-flex align-items-center gap-2">
+                        <i className="bi bi-patch-check-fill text-success fs-4"></i>
+                        <div>
+                          <strong className="text-success-emphasis">
+                            [CONFIRMED] Cryptographically Verified on Ethereum Sepolia Ledger
+                          </strong>
+                          <div className="small text-muted">
+                            Mined on Sepolia Testnet. Batch #{product.productId} matches on-chain smart contract record.
+                          </div>
+                        </div>
+                      </div>
+                      {product.qrBlockchainHash && (
+                        <a
+                          href={`https://sepolia.etherscan.io/tx/${product.qrBlockchainHash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-sm btn-outline-success font-monospace"
+                        >
+                          Sepolia Etherscan <i className="bi bi-box-arrow-up-right ms-1"></i>
+                        </a>
+                      )}
+                    </div>
+                  );
+                }
+
+                if (isSimulated) {
+                  return (
+                    <div className="alert alert-warning border border-warning-subtle shadow-sm d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
+                      <div className="d-flex align-items-center gap-2">
+                        <i className="bi bi-shield-shaded text-warning fs-4"></i>
+                        <div>
+                          <strong className="text-dark">
+                            [SIMULATED] Demonstration Provenance Record (Sandbox Demo Mode)
+                          </strong>
+                          <div className="small text-muted">
+                            Cryptographic proof generated locally for educational evaluation. Not mined on Ethereum mainnet or Sepolia testnet.
+                          </div>
+                        </div>
+                      </div>
+                      <span className="badge bg-warning text-dark font-monospace border">
+                        DEMO SANDBOX
+                      </span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="alert alert-info border border-info-subtle shadow-sm d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
+                    <div className="d-flex align-items-center gap-2">
+                      <i className="bi bi-info-circle-fill text-primary fs-4"></i>
+                      <div>
+                        <strong className="text-primary-emphasis">
+                          [UNVERIFIED / PENDING] Verified by Datastore Ledger
+                        </strong>
+                        <div className="small text-muted">
+                          Batch #{product.productId} is stored off-chain. On-chain receipt verification pending or unconfirmed.
+                        </div>
+                      </div>
+                    </div>
+                    <span className="badge bg-light text-secondary border font-monospace">
+                      OFF-CHAIN STORE
+                    </span>
+                  </div>
+                );
+              })()}
 
               {/* Main Product Card */}
               <div className="agri-card mb-4">

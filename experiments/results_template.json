@@ -1,0 +1,32 @@
+{
+  "experimentMetadata": {
+    "title": "Empirical Throughput & Latency Evaluation of Cloud-Deployed Agriculture Traceability API",
+    "date": "2026-10-10",
+    "environment": "Local Host / AWS App Runner Prototype",
+    "hardware": {
+      "cpu": "Intel/AMD Multi-Core",
+      "ramGb": 16,
+      "os": "Windows / Linux"
+    }
+  },
+  "workloads": [
+    {
+      "name": "Read-Heavy Catalog Query (/api/products)",
+      "concurrencyVUs": 25,
+      "totalRequests": 500,
+      "throughputRps": 0.0,
+      "latencyP50Ms": 0.0,
+      "latencyP95Ms": 0.0,
+      "errorRatePercent": 0.0
+    },
+    {
+      "name": "Blockchain Trace Verification Query (/api/products/101/verify)",
+      "concurrencyVUs": 10,
+      "totalRequests": 100,
+      "throughputRps": 0.0,
+      "latencyP50Ms": 0.0,
+      "latencyP95Ms": 0.0,
+      "errorRatePercent": 0.0
+    }
+  ]
+}

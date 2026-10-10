@@ -2,7 +2,8 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Agriculture Supply Chain Platform - Production Cloud Infrastructure
   Provisions Amazon S3 (Static Web App), Amazon CloudFront (Edge CDN with OAC),
-  AWS IAM Least-Privilege Roles, and CloudWatch Alarms for University Capstone Review.
+  AWS App Runner (Containerized API), Amazon CloudWatch (Observability & Alarms),
+  and AWS IAM Least-Privilege Roles for University Capstone and Research Evaluation.
 
 Parameters:
   ProjectName:
@@ -14,11 +15,27 @@ Parameters:
     Default: production
     AllowedValues: [development, staging, production]
     Description: Target deployment tier
+  BackendImageIdentifier:
+    Type: String
+    Default: public.ecr.aws/aws-containers/hello-app-runner:latest
+    Description: >
+      ECR image URI for the containerized Express API (e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/agri-chain-backend:latest).
+  JwtSecretParameter:
+    Type: String
+    NoEcho: true
+    Default: AgriChain-Production-Secret-Key-MustBeReplacedInAWS-2026
+    Description: Cryptographic secret key for signing JWT authentication tokens
+  DatabaseConnectionString:
+    Type: String
+    NoEcho: true
+    Default: mongodb+srv://dbuser:REPLACE_WITH_MANAGED_PASS@cluster0.mongodb.net/agri_chain?retryWrites=true&w=majority
+    Description: Managed TLS MongoDB Atlas or AWS DocumentDB connection string
 
 Resources:
-  # 1. S3 Storage Bucket for SPA Frontend Artifacts
+  # 1. Private S3 Storage Bucket for SPA Frontend Artifacts
   FrontendS3Bucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
     Properties:
       BucketName: !Sub "${ProjectName}-frontend-${AWS::AccountId}-${AWS::Region}"
       BucketEncryption:
@@ -41,29 +58,123 @@ Resources:
     Type: AWS::CloudFront::OriginAccessControl
     Properties:
       OriginAccessControlConfig:
-        Name: !Sub "${ProjectName}-oac"
+        Name: !Sub "${ProjectName}-oac-${Environment}"
         OriginAccessControlOriginType: s3
         SigningBehavior: always
         SigningProtocol: sigv4
 
-  # 3. CloudFront Global Distribution
+  # 3. CloudWatch Log Group for Structured Application Logs
+  AppCloudWatchLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apprunner/${ProjectName}-${Environment}"
+      RetentionInDays: 30
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # 4. IAM Role for App Runner Instance Execution & CloudWatch Logging
+  AppRunnerInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-apprunner-instance-role-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - tasks.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AppRunnerCloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: !GetAtt AppCloudWatchLogGroup.Arn
+
+  # 5. IAM Role for App Runner ECR Access
+  AppRunnerECRAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-apprunner-ecr-role-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - build.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+
+  # 6. AWS App Runner Service (Fully Managed Containerized Express API)
+  BackendAppRunnerService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: !Sub "${ProjectName}-api-${Environment}"
+      SourceConfiguration:
+        AutoDeploymentsEnabled: false
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AppRunnerECRAccessRole.Arn
+        ImageRepository:
+          ImageIdentifier: !Ref BackendImageIdentifier
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            Port: "5000"
+            RuntimeEnvironmentVariables:
+              - Name: NODE_ENV
+                Value: production
+              - Name: PORT
+                Value: "5000"
+              - Name: JWT_SECRET
+                Value: !Ref JwtSecretParameter
+              - Name: MONGODB_URI
+                Value: !Ref DatabaseConnectionString
+      InstanceConfiguration:
+        Cpu: "1024" # 1 vCPU
+        Memory: "2048" # 2 GB RAM
+        InstanceRoleArn: !GetAtt AppRunnerInstanceRole.Arn
+      HealthCheckConfiguration:
+        Protocol: HTTP
+        Path: /api/health
+        Interval: 10
+        Timeout: 5
+        HealthyThreshold: 1
+        UnhealthyThreshold: 3
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # 7. CloudFront Global Edge Distribution (Routes Frontend S3 + API Requests)
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
       DistributionConfig:
         Enabled: true
-        Comment: !Sub "${ProjectName} CDN Edge Distribution"
+        Comment: !Sub "${ProjectName} CDN Edge Distribution (${Environment})"
         DefaultRootObject: index.html
         HttpVersion: http2and3
-        PriceClass: PriceClass_100 # Cost-effective: US/Europe edge locations
+        PriceClass: PriceClass_100 # Cost-effective: US & Europe edge POPs
         Origins:
-          - Id: S3Origin
+          - Id: S3FrontendOrigin
             DomainName: !GetAtt FrontendS3Bucket.RegionalDomainName
             OriginAccessControlId: !GetAtt CloudFrontOAC.Id
             S3OriginConfig:
               OriginAccessIdentity: ""
         DefaultCacheBehavior:
-          TargetOriginId: S3Origin
+          TargetOriginId: S3FrontendOrigin
           ViewerProtocolPolicy: redirect-to-https
           AllowedMethods: [GET, HEAD, OPTIONS]
           CachedMethods: [GET, HEAD]
@@ -72,7 +183,7 @@ Resources:
             QueryString: false
             Cookies:
               Forward: none
-        # Single Page Application (SPA) Error Routing
+        # Single Page Application (SPA) Client-Side Route Fallback
         CustomErrorResponses:
           - ErrorCode: 403
             ResponseCode: 200
@@ -85,8 +196,10 @@ Resources:
       Tags:
         - Key: Project
           Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
 
-  # 4. Enforce Private S3 Access via CloudFront Policy
+  # 8. S3 Bucket Policy Enforcing Private Access via CloudFront Service Principal
   FrontendBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -104,42 +217,34 @@ Resources:
               StringEquals:
                 AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution.Id}"
 
-  # 5. IAM Role for API Backend Compute (AWS App Runner / EC2)
-  AppRunnerInstanceRole:
-    Type: AWS::IAM::Role
+  # 9. CloudWatch Metric Alarm for Backend 5xx Server Errors
+  Backend5xxErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
     Properties:
-      RoleName: !Sub "${ProjectName}-apprunner-instance-role"
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - tasks.apprunner.amazonaws.com
-                - ec2.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
-      Policies:
-        - PolicyName: CloudWatchMetricsLogging
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                  - logs:DescribeLogStreams
-                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/${ProjectName}/*"
+      AlarmName: !Sub "${ProjectName}-backend-5xx-alarm-${Environment}"
+      AlarmDescription: Triggers when the App Runner backend experiences elevated HTTP 5xx error rates.
+      MetricName: 5xxStatusResponses
+      Namespace: AWS/AppRunner
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: ServiceName
+          Value: !Sub "${ProjectName}-api-${Environment}"
+      TreatMissingData: notBreaching
 
 Outputs:
   CloudFrontDistributionURL:
     Description: Global HTTPS Edge URL for the Agriculture Supply Chain web application
     Value: !Sub "https://${CloudFrontDistribution.DomainName}"
-  S3BucketName:
-    Description: Production S3 Bucket housing static Vite bundles
+  BackendServiceURL:
+    Description: Production HTTPS URL for the containerized AWS App Runner API
+    Value: !Sub "https://${BackendAppRunnerService.ServiceUrl}"
+  FrontendS3BucketName:
+    Description: Private S3 Bucket housing production Vite static artifacts
     Value: !Ref FrontendS3Bucket
   CloudFrontDistributionId:
-    Description: CloudFront Distribution Identifier for cache invalidation
+    Description: CloudFront Distribution Identifier for invalidation triggers
     Value: !Ref CloudFrontDistribution

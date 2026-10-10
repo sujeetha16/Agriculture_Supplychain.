@@ -1,0 +1,23 @@
+{
+  "testParameters": {
+    "targetUrl": "http://localhost:5000/api/products",
+    "concurrencyVUs": 10,
+    "totalRequests": 100,
+    "timestamp": "2026-10-10T08:05:12.617Z"
+  },
+  "performanceMetrics": {
+    "totalDurationMs": 221,
+    "throughputRps": 452.49,
+    "successCount": 100,
+    "failureCount": 0,
+    "errorRatePercent": 0,
+    "latencyMs": {
+      "min": 11.97,
+      "p50": 20.1,
+      "p90": 24.72,
+      "p95": 25.5,
+      "p99": 28.54,
+      "max": 29.64
+    }
+  }
+}

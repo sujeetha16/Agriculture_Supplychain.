@@ -2,6 +2,8 @@
 const express = require("express");
 const { body, param, validationResult } = require("express-validator");
 const Product = require("../models/Product");
+const { authenticate, optionalAuth, requireRole, requireWalletMatch } = require("../middleware/auth");
+const { verifyTransaction } = require("../services/blockchainVerifier");
 
 const router = express.Router();
 
@@ -23,7 +25,7 @@ const dateRule = (field) =>
     .matches(/^\d{4}-\d{2}-\d{2}$/)
     .withMessage(`${field} must use YYYY-MM-DD`);
 
-// GET /api/products - list all products
+// GET /api/products - list all products (public query)
 router.get("/", async (req, res) => {
   const products = await Product.find().sort({ productId: 1 });
   res.json({ success: true, count: products.length, products });
@@ -46,6 +48,8 @@ router.get("/stats", async (req, res) => {
   let totalBatches = products.length;
   let inTransitCount = 0;
   let completedCount = 0;
+  let verifiedOnChainCount = 0;
+  let simulatedDemoCount = 0;
   const recentEvents = [];
 
   for (const p of products) {
@@ -63,6 +67,12 @@ router.get("/stats", async (req, res) => {
       completedCount++;
     }
 
+    if (p.verificationStatus === "VERIFIED_ON_CHAIN") {
+      verifiedOnChainCount++;
+    } else {
+      simulatedDemoCount++;
+    }
+
     if (Array.isArray(p.history)) {
       for (const h of p.history) {
         recentEvents.push({
@@ -73,13 +83,14 @@ router.get("/stats", async (req, res) => {
           receiverAddress: h.receiverAddress,
           date: h.date,
           txHash: h.txHash,
+          verificationStatus: h.verificationStatus || "UNVERIFIED",
+          isSimulated: h.isSimulated || false,
           createdAt: h.createdAt
         });
       }
     }
   }
 
-  // Sort recent events newest first
   recentEvents.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
 
   res.json({
@@ -88,6 +99,8 @@ router.get("/stats", async (req, res) => {
       totalBatches,
       inTransitCount,
       completedCount,
+      verifiedOnChainCount,
+      simulatedDemoCount,
       activeFarming: byStatus.Created,
       byStatus,
       byCropType,
@@ -96,8 +109,15 @@ router.get("/stats", async (req, res) => {
   });
 });
 
-// POST /api/products/reset-demo - reloads initial seed data for faculty demos
+// POST /api/products/reset-demo - reloads initial seed data for faculty demos (Non-prod only)
 router.post("/reset-demo", async (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    return res.status(403).json({
+      success: false,
+      message: "Catalog reset is prohibited in production tier."
+    });
+  }
+
   if (typeof Product.resetToDefault === "function") {
     const products = await Product.resetToDefault();
     return res.json({
@@ -110,7 +130,7 @@ router.post("/reset-demo", async (req, res) => {
   res.json({ success: true, message: "Using standard MongoDB cluster." });
 });
 
-// GET /api/products/:productId - single product trace
+// GET /api/products/:productId - single product trace (public)
 router.get("/:productId", [
   param("productId").isInt({ min: 1 })
 ], validate, async (req, res) => {
@@ -119,6 +139,49 @@ router.get("/:productId", [
     return res.status(404).json({ success: false, message: "Agricultural product not found." });
   }
   res.json({ success: true, product });
+});
+
+// GET /api/products/:productId/verify - cryptographic verification audit of on-chain state
+router.get("/:productId/verify", [
+  param("productId").isInt({ min: 1 })
+], validate, async (req, res) => {
+  const product = await Product.findOne({ productId: Number(req.params.productId) });
+  if (!product) {
+    return res.status(404).json({ success: false, message: "Agricultural product not found." });
+  }
+
+  // Audit product creation hash
+  const creationVerification = await verifyTransaction(product.qrBlockchainHash, {
+    productId: product.productId,
+    isDemoMode: product.isSimulated
+  });
+
+  // Audit each history event hash
+  const historyVerifications = [];
+  if (Array.isArray(product.history)) {
+    for (const h of product.history) {
+      const v = await verifyTransaction(h.txHash, {
+        productId: product.productId,
+        expectedAction: h.action,
+        isDemoMode: h.isSimulated
+      });
+      historyVerifications.push({
+        action: h.action,
+        txHash: h.txHash,
+        actorAddress: h.actorAddress,
+        verification: v
+      });
+    }
+  }
+
+  res.json({
+    success: true,
+    productId: product.productId,
+    productName: product.name,
+    overallStatus: product.status,
+    creationVerification,
+    historyVerifications
+  });
 });
 
 // GET /api/products/wallet/:address - products associated with actor wallet
@@ -138,13 +201,16 @@ router.get("/wallet/:address", [
   res.json({ success: true, count: products.length, products });
 });
 
-// POST /api/products - register new agricultural batch
+// POST /api/products - register new agricultural batch (Farmer Role Required)
 router.post("/", [
+  authenticate,
+  requireRole(1), // Role 1: Farmer
+  requireWalletMatch("farmer"),
   body("productId").isInt({ min: 1 }),
   body("name").trim().notEmpty().isLength({ max: 120 }),
   dateRule("harvestDate"),
   addressRule("farmer"),
-  body("txHash").matches(/^0x[a-fA-F0-9]{64}$/)
+  body("txHash").isString().notEmpty()
 ], validate, async (req, res) => {
   const {
     productId,
@@ -159,7 +225,8 @@ router.post("/", [
     storageConditions,
     certifications,
     estimatedShelfLife,
-    notes
+    notes,
+    isDemoMode
   } = req.body;
 
   const existing = await Product.findOne({ productId });
@@ -168,6 +235,13 @@ router.post("/", [
   }
 
   const normalizedFarmer = farmer.toLowerCase();
+
+  // Cryptographic receipt check
+  const verification = await verifyTransaction(txHash, {
+    isDemoMode: Boolean(isDemoMode || req.user.isDemo),
+    productId,
+    expectedAction: "CREATED"
+  });
 
   const product = await Product.create({
     productId: Number(productId),
@@ -184,21 +258,29 @@ router.post("/", [
     farmer: normalizedFarmer,
     status: "Created",
     qrBlockchainHash: txHash,
+    verificationStatus: verification.status,
+    isSimulated: verification.isSimulated,
+    blockNumber: verification.blockNumber || null,
     history: [{
       action: "CREATED",
       actorAddress: normalizedFarmer,
       receiverAddress: null,
       date: harvestDate,
       txHash,
+      verificationStatus: verification.status,
+      isSimulated: verification.isSimulated,
+      blockNumber: verification.blockNumber || null,
+      gasUsed: verification.gasUsed || null,
+      verifiedAt: verification.verified ? new Date().toISOString() : null,
       location: farmLocation || "Origin Farm",
-      notes: "Harvest registered and logged to smart contract ledger."
+      notes: "Harvest registered and logged."
     }]
   });
 
-  res.status(201).json({ success: true, product });
+  res.status(201).json({ success: true, product, verification });
 });
 
-// Helper for linear supply-chain state machine transitions
+// Helper for linear supply-chain state machine transitions with authorization & receipt checks
 async function updateProductAction(req, res, action) {
   const productId = Number(req.params.productId);
   const product = await Product.findOne({ productId });
@@ -207,33 +289,64 @@ async function updateProductAction(req, res, action) {
     return res.status(404).json({ success: false, message: "Agricultural product batch not found." });
   }
 
-  const { actorAddress, receiverAddress, date, txHash, location, notes } = req.body;
+  const { actorAddress, receiverAddress, date, txHash, location, notes, isDemoMode } = req.body;
   const normalizedActor = actorAddress.toLowerCase();
   const normalizedReceiver = receiverAddress ? receiverAddress.toLowerCase() : null;
 
   const requirements = {
-    DISPATCHED_TO_DISTRIBUTOR: ["farmer", "Created", "DispatchedToDistributor"],
-    RECEIVED_BY_DISTRIBUTOR: ["distributor", "DispatchedToDistributor", "ReceivedByDistributor"],
-    DISPATCHED_TO_RETAILER: ["distributor", "ReceivedByDistributor", "DispatchedToRetailer"],
-    RECEIVED_BY_RETAILER: ["retailer", "DispatchedToRetailer", "ReceivedByRetailer"],
-    SOLD_TO_CONSUMER: ["retailer", "ReceivedByRetailer", "SoldToConsumer"]
+    DISPATCHED_TO_DISTRIBUTOR: ["farmer", "Created", "DispatchedToDistributor", 1],
+    RECEIVED_BY_DISTRIBUTOR: ["distributor", "DispatchedToDistributor", "ReceivedByDistributor", 2],
+    DISPATCHED_TO_RETAILER: ["distributor", "ReceivedByDistributor", "DispatchedToRetailer", 2],
+    RECEIVED_BY_RETAILER: ["retailer", "DispatchedToRetailer", "ReceivedByRetailer", 3],
+    SOLD_TO_CONSUMER: ["retailer", "ReceivedByRetailer", "SoldToConsumer", 3]
   };
 
-  const [roleField, expectedStatus, newStatus] = requirements[action];
+  const [roleField, expectedStatus, newStatus, requiredRole] = requirements[action];
+
+  // 1. Role verification
+  if (req.user && !req.user.isDemo && req.user.role !== requiredRole) {
+    return res.status(403).json({
+      success: false,
+      message: `Role mismatch: User role (${req.user.roleName || req.user.role}) is not authorized for ${action}.`
+    });
+  }
+
+  // 2. State machine sequence validation
   if (product.status !== expectedStatus) {
     return res.status(409).json({
       success: false,
-      message: `Invalid supply-chain state transition. Expected ${expectedStatus}, found ${product.status}.`
+      message: `Invalid supply-chain state transition. Expected '${expectedStatus}', but product is currently '${product.status}'.`
     });
   }
 
-  if (product[roleField] !== normalizedActor) {
+  // 3. Actor custody validation
+  if (roleField === "farmer" && product.farmer !== normalizedActor) {
     return res.status(403).json({
       success: false,
-      message: `Signer wallet (${normalizedActor.slice(0, 8)}...) does not match designated ${roleField} (${product[roleField] ? product[roleField].slice(0, 8) + '...' : 'none'}).`
+      message: `Signer wallet (${normalizedActor.slice(0, 8)}...) does not match designated Farmer (${product.farmer.slice(0, 8)}...).`
+    });
+  }
+  if (roleField === "distributor" && product.distributor && product.distributor !== normalizedActor) {
+    return res.status(403).json({
+      success: false,
+      message: `Signer wallet (${normalizedActor.slice(0, 8)}...) does not match assigned Distributor (${product.distributor.slice(0, 8)}...).`
+    });
+  }
+  if (roleField === "retailer" && product.retailer && product.retailer !== normalizedActor) {
+    return res.status(403).json({
+      success: false,
+      message: `Signer wallet (${normalizedActor.slice(0, 8)}...) does not match assigned Retailer (${product.retailer.slice(0, 8)}...).`
     });
   }
 
+  // 4. Cryptographic receipt verification
+  const verification = await verifyTransaction(txHash, {
+    isDemoMode: Boolean(isDemoMode || req.user?.isDemo),
+    productId,
+    expectedAction: action
+  });
+
+  // 5. Update custody & state
   if (action === "DISPATCHED_TO_DISTRIBUTOR") product.distributor = normalizedReceiver;
   if (action === "DISPATCHED_TO_RETAILER") product.retailer = normalizedReceiver;
   if (action === "SOLD_TO_CONSUMER") product.consumer = normalizedReceiver;
@@ -245,6 +358,11 @@ async function updateProductAction(req, res, action) {
     receiverAddress: normalizedReceiver,
     date,
     txHash,
+    verificationStatus: verification.status,
+    isSimulated: verification.isSimulated,
+    blockNumber: verification.blockNumber || null,
+    gasUsed: verification.gasUsed || null,
+    verifiedAt: verification.verified ? new Date().toISOString() : null,
     location: location || null,
     notes: notes || null,
     createdAt: new Date().toISOString()
@@ -253,37 +371,52 @@ async function updateProductAction(req, res, action) {
   if (!product.qrBlockchainHash) product.qrBlockchainHash = txHash;
 
   await product.save();
-  return res.json({ success: true, product });
+  return res.json({ success: true, product, verification });
 }
 
 const actionValidators = [
   body("actorAddress").matches(/^0x[a-fA-F0-9]{40}$/),
   body("receiverAddress").optional().matches(/^0x[a-fA-F0-9]{40}$/),
   dateRule("date"),
-  body("txHash").matches(/^0x[a-fA-F0-9]{64}$/)
+  body("txHash").isString().notEmpty()
 ];
 
 router.post("/:productId/dispatch-distributor", [
+  authenticate,
+  requireRole(1),
+  requireWalletMatch("actorAddress"),
   param("productId").isInt({ min: 1 }),
   ...actionValidators
 ], validate, (req, res) => updateProductAction(req, res, "DISPATCHED_TO_DISTRIBUTOR"));
 
 router.post("/:productId/receive-distributor", [
+  authenticate,
+  requireRole(2),
+  requireWalletMatch("actorAddress"),
   param("productId").isInt({ min: 1 }),
   ...actionValidators
 ], validate, (req, res) => updateProductAction(req, res, "RECEIVED_BY_DISTRIBUTOR"));
 
 router.post("/:productId/dispatch-retailer", [
+  authenticate,
+  requireRole(2),
+  requireWalletMatch("actorAddress"),
   param("productId").isInt({ min: 1 }),
   ...actionValidators
 ], validate, (req, res) => updateProductAction(req, res, "DISPATCHED_TO_RETAILER"));
 
 router.post("/:productId/receive-retailer", [
+  authenticate,
+  requireRole(3),
+  requireWalletMatch("actorAddress"),
   param("productId").isInt({ min: 1 }),
   ...actionValidators
 ], validate, (req, res) => updateProductAction(req, res, "RECEIVED_BY_RETAILER"));
 
 router.post("/:productId/sell-consumer", [
+  authenticate,
+  requireRole(3),
+  requireWalletMatch("actorAddress"),
   param("productId").isInt({ min: 1 }),
   ...actionValidators
 ], validate, (req, res) => updateProductAction(req, res, "SOLD_TO_CONSUMER"));

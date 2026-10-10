@@ -22,6 +22,23 @@ const historySchema = new mongoose.Schema({
   receiverAddress: { type: String, default: null },
   date: { type: String, required: true },
   txHash: { type: String, required: true },
+  verificationStatus: {
+    type: String,
+    enum: [
+      "VERIFIED_ON_CHAIN",
+      "SIMULATED_DEMO",
+      "PENDING_OR_NOT_FOUND",
+      "RPC_UNAVAILABLE",
+      "TRANSACTION_REVERTED",
+      "INVALID_HASH_FORMAT",
+      "UNVERIFIED"
+    ],
+    default: "UNVERIFIED"
+  },
+  isSimulated: { type: Boolean, default: false },
+  blockNumber: { type: Number, default: null },
+  gasUsed: { type: String, default: null },
+  verifiedAt: { type: Date, default: null },
   location: { type: String, default: null },
   notes: { type: String, default: null },
   createdAt: { type: Date, default: Date.now }
@@ -68,6 +85,21 @@ const productSchema = new mongoose.Schema({
     default: "Created"
   },
   qrBlockchainHash: { type: String, default: null },
+  verificationStatus: {
+    type: String,
+    enum: [
+      "VERIFIED_ON_CHAIN",
+      "SIMULATED_DEMO",
+      "PENDING_OR_NOT_FOUND",
+      "RPC_UNAVAILABLE",
+      "TRANSACTION_REVERTED",
+      "INVALID_HASH_FORMAT",
+      "UNVERIFIED"
+    ],
+    default: "UNVERIFIED"
+  },
+  isSimulated: { type: Boolean, default: false },
+  blockNumber: { type: Number, default: null },
   history: { type: [historySchema], default: [] }
 }, { timestamps: true });
 
@@ -139,8 +171,8 @@ class QueryWrapper {
       if (sortCriteria && sortCriteria.productId) {
         sorted.sort((a, b) =>
           sortCriteria.productId > 0
-            ? a.productId - b.productId
-            : b.productId - a.productId
+            ? Number(a.productId) - Number(b.productId)
+            : Number(b.productId) - Number(a.productId)
         );
       }
       return sorted;
@@ -210,6 +242,9 @@ const LocalProductRepository = {
       consumer: data.consumer || null,
       status: data.status || "Created",
       qrBlockchainHash: data.qrBlockchainHash || data.txHash || null,
+      verificationStatus: data.verificationStatus || "UNVERIFIED",
+      isSimulated: Boolean(data.isSimulated),
+      blockNumber: data.blockNumber || null,
       history: data.history || [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()

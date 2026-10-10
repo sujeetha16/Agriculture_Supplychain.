@@ -1,6 +1,11 @@
 // Path: backend/routes/auth.js
 const express = require("express");
 const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
+const rateLimit = require("express-rate-limit");
+const User = require("../models/User");
+const { authenticate, JWT_SECRET } = require("../middleware/auth");
+
 const router = express.Router();
 
 // Role configuration mapping
@@ -11,161 +16,140 @@ const ROLE_CONFIG = {
   4: { roleName: "Consumer", avatar: "👤", badgeColor: "secondary" }
 };
 
-// Verified Agricultural Stakeholders Directory
-const USERS = [
-  {
-    id: "user-farmer",
-    username: "farmer",
-    password: "Farmer@123",
-    email: "john.vance@greenvalleyfarms.com",
-    name: "John Vance",
-    organization: "Green Valley Organic Farms",
-    role: 1,
-    roleName: "Farmer",
-    location: "Yakima Valley, Washington",
-    phone: "+1 (509) 555-0142",
-    walletAddress: "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
-    avatar: "👨‍🌾",
-    badgeColor: "success",
-    verifiedCertifications: ["USDA Organic", "GlobalG.A.P.", "Non-GMO"]
-  },
-  {
-    id: "user-distributor",
-    username: "distributor",
-    password: "Distributor@123",
-    email: "marcus.brody@pacificcoldchain.com",
-    name: "Marcus Brody",
-    organization: "Pacific Cold-Chain Logistics Hub",
-    role: 2,
-    roleName: "Distributor",
-    location: "Seattle Regional Logistics Hub, WA",
-    phone: "+1 (206) 555-0188",
-    walletAddress: "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
-    avatar: "🚚",
-    badgeColor: "warning",
-    verifiedCertifications: ["HACCP Certified", "ISO 22000 Cold Chain"]
-  },
-  {
-    id: "user-retailer",
-    username: "retailer",
-    password: "Retailer@123",
-    email: "sarah.jenkins@freshmarketorganics.com",
-    name: "Sarah Jenkins",
-    organization: "FreshMarket Supermarket #104",
-    role: 3,
-    roleName: "Retailer",
-    location: "Downtown Westlake Store, Seattle",
-    phone: "+1 (206) 555-0199",
-    walletAddress: "0x9965507d1a55bcc2695c58ba16fb37d819b0a4df",
-    avatar: "🏪",
-    badgeColor: "info",
-    verifiedCertifications: ["Certified Organic Retailer", "Fair Trade Partner"]
-  },
-  {
-    id: "user-consumer",
-    username: "consumer",
-    password: "Consumer@123",
-    email: "alice.chen@gmail.com",
-    name: "Alice Chen",
-    organization: "Verified Consumer Member",
-    role: 4,
-    roleName: "Consumer",
-    location: "Seattle, WA",
-    phone: "+1 (206) 555-0123",
-    walletAddress: "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
-    avatar: "👤",
-    badgeColor: "secondary",
-    verifiedCertifications: ["Eco-Shopper Verified"]
+// Rate limiting for auth endpoints (anti-brute-force)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // max 100 requests per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many authentication requests from this IP. Please try again after 15 minutes."
   }
-];
+});
 
-// Helper to resolve any wallet address or username to human-readable stakeholder profile
-function getStakeholderProfile(addressOrUsername) {
-  if (!addressOrUsername) return null;
-  const target = addressOrUsername.toLowerCase();
-  const match = USERS.find(
-    (u) =>
-      u.walletAddress.toLowerCase() === target ||
-      u.username.toLowerCase() === target ||
-      u.id.toLowerCase() === target
+// Helper to issue standard cryptographic JWT
+function issueToken(user) {
+  return jwt.sign(
+    {
+      id: user.id || user._id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      roleName: user.roleName,
+      walletAddress: user.walletAddress
+    },
+    JWT_SECRET,
+    { expiresIn: "24h" }
   );
-  if (match) return match;
-
-  return {
-    name: `User ${addressOrUsername.slice(0, 6)}...`,
-    organization: "External Network Actor",
-    roleName: "Stakeholder",
-    walletAddress: addressOrUsername,
-    avatar: "💼",
-    badgeColor: "dark"
-  };
 }
 
-// POST /api/auth/login
-router.post("/login", (req, res) => {
-  const { username, password, role } = req.body;
+// GET /api/auth/stakeholders - public list of stakeholders (passwords stripped)
+router.get("/stakeholders", async (req, res) => {
+  const users = await User.find({});
+  res.json({
+    success: true,
+    stakeholders: users.map((u) => (typeof u.toJSON === "function" ? u.toJSON() : u))
+  });
+});
 
-  // 1. If role is provided (quick 1-click role login)
+// GET /api/auth/me - inspect currently authenticated token
+router.get("/me", authenticate, async (req, res) => {
+  const user = await User.findOne({ username: req.user.username });
+  if (!user) {
+    return res.status(404).json({ success: false, message: "User not found." });
+  }
+  res.json({
+    success: true,
+    user: typeof user.toJSON === "function" ? user.toJSON() : user
+  });
+});
+
+// POST /api/auth/login - authenticate stakeholder
+router.post("/login", authLimiter, async (req, res) => {
+  const { username, password, role } = req.body;
+  const isProduction = process.env.NODE_ENV === "production";
+
+  // 1. Quick 1-click role login (restricted to non-production demo environments)
   if (role) {
-    const user = USERS.find((u) => u.role === Number(role));
+    if (isProduction) {
+      return res.status(403).json({
+        success: false,
+        message: "1-Click Role Login is strictly disabled in production. Please authenticate with username and password."
+      });
+    }
+
+    const targetRole = Number(role);
+    const user = await User.findOne({ role: targetRole });
     if (user) {
+      const safeUser = typeof user.toJSON === "function" ? user.toJSON() : user;
+      const token = issueToken(safeUser);
       return res.json({
         success: true,
-        message: `Authenticated as ${user.name} (${user.roleName})`,
-        token: `token-${user.username}-${Date.now()}`,
-        user
+        message: `[Demo Mode] Authenticated as ${safeUser.name} (${safeUser.roleName})`,
+        token,
+        user: safeUser
       });
     }
   }
 
   // 2. Standard credential authentication
   const identifier = (username || "").toLowerCase().trim();
-  if (!identifier) {
+  const cleanPassword = (password || "").trim();
+
+  if (!identifier || !cleanPassword) {
     return res.status(400).json({
       success: false,
-      message: "Please enter your username or email address."
+      message: "Both username/email and password are required."
     });
   }
 
-  const user = USERS.find(
-    (u) =>
-      u.username.toLowerCase() === identifier ||
-      u.email.toLowerCase() === identifier
-  );
+  const user = await User.findOne({
+    $or: [{ username: identifier }, { email: identifier }]
+  });
 
   if (!user) {
-    return res.status(404).json({
-      success: false,
-      message: "No registered stakeholder found with this username or email."
-    });
-  }
-
-  // Password verification
-  const trimmedPassword = (password || "").trim();
-  const validPassword =
-    !user.password ||
-    trimmedPassword === user.password ||
-    trimmedPassword === "Pass@1234" ||
-    trimmedPassword === "demo123" ||
-    trimmedPassword.toLowerCase() === `${user.username.toLowerCase()}123`;
-
-  if (!validPassword) {
     return res.status(401).json({
       success: false,
-      message: `Invalid password for @${user.username}. Use '${user.password || "Pass@1234"}'`
+      message: "Invalid username or password."
     });
   }
+
+  // Cryptographic bcrypt password check
+  let passwordMatch = false;
+  if (typeof user.comparePassword === "function") {
+    passwordMatch = await user.comparePassword(cleanPassword);
+  }
+
+  // Fallback demo password check if legacy seed not yet hashed in dev
+  if (!passwordMatch && !isProduction) {
+    passwordMatch =
+      cleanPassword === "Pass@1234" ||
+      cleanPassword === "demo123" ||
+      cleanPassword === `${user.username}123` ||
+      (cleanPassword === "Farmer@123" && user.role === 1);
+  }
+
+  if (!passwordMatch) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid username or password."
+    });
+  }
+
+  const safeUser = typeof user.toJSON === "function" ? user.toJSON() : user;
+  const token = issueToken(safeUser);
 
   return res.json({
     success: true,
-    message: `Welcome back, ${user.name}!`,
-    token: `token-${user.username}-${Date.now()}`,
-    user
+    message: `Welcome back, ${safeUser.name}!`,
+    token,
+    user: safeUser
   });
 });
 
-// POST /api/auth/register - Register new stakeholder with comprehensive field validation
-router.post("/register", (req, res) => {
+// POST /api/auth/register - Register new stakeholder with comprehensive field validation & hashing
+router.post("/register", authLimiter, async (req, res) => {
   const {
     name,
     username,
@@ -180,56 +164,66 @@ router.post("/register", (req, res) => {
 
   const errors = {};
 
-  // 1. Name validation: required, at least 3 chars, letters/spaces/hyphens only
+  // 1. Name validation
   if (!name || typeof name !== "string" || name.trim().length < 3) {
     errors.name = "Full Name is required and must be at least 3 characters long.";
   } else if (!/^[a-zA-Z\s.'-]+$/.test(name.trim())) {
     errors.name = "Full Name can only contain letters, spaces, hyphens, and apostrophes.";
   }
 
-  // 2. Username validation: required, 3-20 alphanumeric characters, unique
+  // 2. Username validation
   const cleanUsername = (username || "").trim().toLowerCase();
   if (!cleanUsername) {
     errors.username = "Username is required.";
   } else if (!/^[a-z0-9_]{3,20}$/.test(cleanUsername)) {
     errors.username = "Username must be 3-20 characters long and contain only letters, numbers, or underscores.";
-  } else if (USERS.some((u) => u.username.toLowerCase() === cleanUsername)) {
-    errors.username = `Username '@${cleanUsername}' is already taken. Please choose another.`;
   }
 
-  // 3. Email validation: required, valid email pattern, unique
+  // 3. Email validation
   const cleanEmail = (email || "").trim().toLowerCase();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!cleanEmail) {
     errors.email = "Email address is required.";
   } else if (!emailRegex.test(cleanEmail)) {
     errors.email = "Please enter a valid email address (e.g. name@domain.com).";
-  } else if (USERS.some((u) => u.email.toLowerCase() === cleanEmail)) {
-    errors.email = "This email is already registered with another account.";
   }
 
-  // 4. Role validation: required, integer 1 to 4
+  // 4. Role validation
   const numRole = Number(role);
   if (!numRole || ![1, 2, 3, 4].includes(numRole)) {
-    errors.role = "Please select a valid role (Farmer, Distributor, Retailer, or Consumer).";
+    errors.role = "Please select a valid role (1: Farmer, 2: Distributor, 3: Retailer, 4: Consumer).";
   }
 
-  // 5. Organization validation: required, min 2 chars
+  // 5. Organization validation
   if (!organization || typeof organization !== "string" || organization.trim().length < 2) {
     errors.organization = "Organization / Farm / Business name must be at least 2 characters long.";
   }
 
-  // 6. Location validation: required, min 2 chars
+  // 6. Location validation
   if (!location || typeof location !== "string" || location.trim().length < 2) {
     errors.location = "Facility location or city/state must be at least 2 characters long.";
   }
 
-  // 7. Password validation: required, min 6 chars
+  // 7. Password validation
   if (!password || typeof password !== "string" || password.length < 6) {
     errors.password = "Password must be at least 6 characters long.";
   }
 
-  // If validation errors exist, return 400 Bad Request
+  // Check unique username & email
+  if (!errors.username) {
+    const existingUser = await User.findOne({ username: cleanUsername });
+    if (existingUser) {
+      errors.username = `Username '@${cleanUsername}' is already taken. Please choose another.`;
+    }
+  }
+
+  if (!errors.email) {
+    const existingEmail = await User.findOne({ email: cleanEmail });
+    if (existingEmail) {
+      errors.email = "This email is already registered with another account.";
+    }
+  }
+
   if (Object.keys(errors).length > 0) {
     return res.status(400).json({
       success: false,
@@ -238,7 +232,6 @@ router.post("/register", (req, res) => {
     });
   }
 
-  // Determine role config
   const roleInfo = ROLE_CONFIG[numRole] || ROLE_CONFIG[4];
 
   // Generate cryptographically random 40-character hex address if not supplied
@@ -247,64 +240,31 @@ router.post("/register", (req, res) => {
       ? walletAddress.toLowerCase()
       : `0x${crypto.randomBytes(20).toString("hex")}`;
 
-  const newUser = {
-    id: `user-${cleanUsername}-${Date.now()}`,
-    username: cleanUsername,
-    password: password.trim(),
+  const createdUser = await User.create({
     name: name.trim(),
+    username: cleanUsername,
     email: cleanEmail,
+    password, // will be hashed by User model
     role: numRole,
     roleName: roleInfo.roleName,
     organization: organization.trim(),
     location: location.trim(),
-    phone: phone ? phone.trim() : "",
+    phone: (phone || "").trim(),
     walletAddress: effectiveAddress,
     avatar: roleInfo.avatar,
     badgeColor: roleInfo.badgeColor,
-    verifiedCertifications: [
-      numRole === 1 ? "Origin Producer Verified" :
-      numRole === 2 ? "Cold-Chain Certified" :
-      numRole === 3 ? "Certified Retailer" : "Verified Consumer Member"
-    ]
-  };
+    verifiedCertifications: ["Self-Declared Stakeholder"]
+  });
 
-  USERS.push(newUser);
+  const safeUser = typeof createdUser.toJSON === "function" ? createdUser.toJSON() : createdUser;
+  const token = issueToken(safeUser);
 
   return res.status(201).json({
     success: true,
-    message: `Account created successfully! Welcome, ${newUser.name}.`,
-    token: `token-${newUser.username}-${Date.now()}`,
-    user: newUser
+    message: `Account created successfully! Welcome to AgriChain, ${safeUser.name}.`,
+    token,
+    user: safeUser
   });
 });
 
-// GET /api/auth/users - list directory of verified actors
-router.get("/users", (req, res) => {
-  res.json({
-    success: true,
-    users: USERS.map(({ id, username, name, organization, role, roleName, location, walletAddress, avatar, badgeColor }) => ({
-      id,
-      username,
-      name,
-      organization,
-      role,
-      roleName,
-      location,
-      walletAddress,
-      avatar,
-      badgeColor
-    }))
-  });
-});
-
-// GET /api/auth/resolve/:address - resolve raw wallet address to clean stakeholder profile
-router.get("/resolve/:address", (req, res) => {
-  const profile = getStakeholderProfile(req.params.address);
-  res.json({ success: true, profile });
-});
-
-module.exports = {
-  router,
-  USERS,
-  getStakeholderProfile
-};
+module.exports = { router, ROLE_CONFIG };
