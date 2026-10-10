@@ -59,6 +59,22 @@ function getVerificationFailureResponse(verification) {
         status: 400,
         message: "Invalid transaction hash format."
       };
+    case "UNSUPPORTED_ACTION":
+      return {
+        status: 400,
+        message: verification.message || "Requested lifecycle action is missing or unsupported."
+      };
+    case "PRODUCT_ID_REQUIRED":
+      return {
+        status: 400,
+        message: verification.message || "Mandatory product ID is required for verification."
+      };
+    case "ACTOR_IDENTITY_REQUIRED":
+    case "RECIPIENT_IDENTITY_REQUIRED":
+      return {
+        status: 400,
+        message: verification.message || "Mandatory stakeholder identity is required for verification."
+      };
     default:
       return {
         status: 422,
@@ -321,41 +337,48 @@ router.post("/", [
     });
   }
 
-  const product = await Product.create({
-    productId: Number(productId),
-    name,
-    cropType: cropType || "Fruits",
-    harvestDate,
-    farmLocation: farmLocation || "Salinas Valley, California",
-    quantity: quantity || "1,000 kg",
-    qualityGrade: qualityGrade || "Grade A+ (Premium Export)",
-    storageConditions: storageConditions || "Cold Chain Controlled (4°C, 85% RH)",
-    certifications: Array.isArray(certifications) ? certifications : ["USDA Organic", "GlobalG.A.P."],
-    estimatedShelfLife: estimatedShelfLife || "45 Days",
-    notes: notes || "",
-    farmer: normalizedFarmer,
-    status: "Created",
-    qrBlockchainHash: txHash,
-    verificationStatus: verification.status,
-    isSimulated: verification.isSimulated,
-    blockNumber: verification.blockNumber || null,
-    history: [{
-      action: "CREATED",
-      actorAddress: normalizedFarmer,
-      receiverAddress: null,
-      date: harvestDate,
-      txHash,
+  try {
+    const product = await Product.create({
+      productId: Number(productId),
+      name,
+      cropType: cropType || "Fruits",
+      harvestDate,
+      farmLocation: farmLocation || "Salinas Valley, California",
+      quantity: quantity || "1,000 kg",
+      qualityGrade: qualityGrade || "Grade A+ (Premium Export)",
+      storageConditions: storageConditions || "Cold Chain Controlled (4°C, 85% RH)",
+      certifications: Array.isArray(certifications) ? certifications : ["USDA Organic", "GlobalG.A.P."],
+      estimatedShelfLife: estimatedShelfLife || "45 Days",
+      notes: notes || "",
+      farmer: normalizedFarmer,
+      status: "Created",
+      qrBlockchainHash: txHash,
       verificationStatus: verification.status,
       isSimulated: verification.isSimulated,
       blockNumber: verification.blockNumber || null,
-      gasUsed: verification.gasUsed || null,
-      verifiedAt: verification.verified ? new Date().toISOString() : null,
-      location: farmLocation || "Origin Farm",
-      notes: "Harvest registered and logged."
-    }]
-  });
+      history: [{
+        action: "CREATED",
+        actorAddress: normalizedFarmer,
+        receiverAddress: null,
+        date: harvestDate,
+        txHash,
+        verificationStatus: verification.status,
+        isSimulated: verification.isSimulated,
+        blockNumber: verification.blockNumber || null,
+        gasUsed: verification.gasUsed || null,
+        verifiedAt: verification.verified ? new Date().toISOString() : null,
+        location: farmLocation || "Origin Farm",
+        notes: "Harvest registered and logged."
+      }]
+    });
 
-  res.status(201).json({ success: true, product, verification });
+    return res.status(201).json({ success: true, product, verification });
+  } catch (err) {
+    if (err.code === 11000 || (err.message && err.message.includes("already exists"))) {
+      return res.status(409).json({ success: false, message: "Batch Product ID already registered." });
+    }
+    throw err;
+  }
 });
 
 // Helper for linear supply-chain state machine transitions with authorization & receipt checks
@@ -448,13 +471,8 @@ async function updateProductAction(req, res, action) {
     });
   }
 
-  // 5. Update custody & state
-  if (action === "DISPATCHED_TO_DISTRIBUTOR") product.distributor = normalizedReceiver;
-  if (action === "DISPATCHED_TO_RETAILER") product.retailer = normalizedReceiver;
-  if (action === "SOLD_TO_CONSUMER") product.consumer = normalizedReceiver;
-
-  product.status = newStatus;
-  product.history.push({
+  // 5. Atomic conditional state transition preventing race conditions & duplicate transitions
+  const historyEntry = {
     action,
     actorAddress: normalizedActor,
     receiverAddress: normalizedReceiver,
@@ -468,12 +486,51 @@ async function updateProductAction(req, res, action) {
     location: location || null,
     notes: notes || null,
     createdAt: new Date().toISOString()
-  });
+  };
 
-  if (!product.qrBlockchainHash) product.qrBlockchainHash = txHash;
+  const updateDoc = {
+    $set: {
+      status: newStatus,
+      updatedAt: new Date().toISOString()
+    },
+    $push: {
+      history: historyEntry
+    }
+  };
 
-  await product.save();
-  return res.json({ success: true, product, verification });
+  if (action === "DISPATCHED_TO_DISTRIBUTOR") updateDoc.$set.distributor = normalizedReceiver;
+  if (action === "DISPATCHED_TO_RETAILER") updateDoc.$set.retailer = normalizedReceiver;
+  if (action === "SOLD_TO_CONSUMER") updateDoc.$set.consumer = normalizedReceiver;
+
+  const filter = {
+    productId,
+    status: expectedStatus,
+    "history.txHash": { $ne: txHash }
+  };
+  if (product.qrBlockchainHash) {
+    filter.qrBlockchainHash = { $ne: txHash };
+  }
+
+  const updatedProduct = await Product.findOneAndUpdate(filter, updateDoc, { new: true });
+  if (!updatedProduct) {
+    const latest = await Product.findOne({ productId });
+    if (!latest) {
+      return res.status(404).json({ success: false, message: "Agricultural product batch not found." });
+    }
+    const alreadyProcessed = Array.isArray(latest.history) && latest.history.some((h) => h.txHash === txHash);
+    if (alreadyProcessed || latest.qrBlockchainHash === txHash) {
+      return res.status(409).json({
+        success: false,
+        message: `Transaction hash ${txHash} has already been processed for this product batch. Duplicate transitions are rejected.`
+      });
+    }
+    return res.status(409).json({
+      success: false,
+      message: `Invalid supply-chain state transition. Expected '${expectedStatus}', but product is currently '${latest.status}'.`
+    });
+  }
+
+  return res.json({ success: true, product: updatedProduct, verification });
 }
 
 const actionValidators = [

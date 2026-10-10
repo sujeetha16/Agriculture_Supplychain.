@@ -5,7 +5,7 @@
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.24-363636.svg)](https://soliditylang.org/)
 [![Hardhat](https://img.shields.io/badge/Hardhat-2.22-yellow.svg)](https://hardhat.org/)
 [![AWS CloudFormation](https://img.shields.io/badge/AWS-CloudFormation-orange.svg)](https://aws.amazon.com/cloudformation/)
-[![Tests](https://img.shields.io/badge/Tests-39%20Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-49%20Passing-brightgreen.svg)]()
 
 A cloud-native agricultural provenance, cold-chain logistics, and traceability platform engineered for a **College Cloud Computing Course Capstone** and **Applied Systems Research Evaluation**. Combines containerized Express microservices on AWS App Runner, high-performance edge delivery via Amazon CloudFront (with Origin Access Control), resilient database persistence, and decentralized Ethereum Sepolia smart-contract verification.
 
@@ -20,10 +20,10 @@ To maintain rigorous academic and engineering honesty, this table documents the 
 | **Frontend SPA** | **VERIFIED & BUILT** | React 18, Vite 5, Bootstrap 5. 279 modules build cleanly into `dist/`. |
 | **Backend REST API** | **VERIFIED & TESTED** | Express 4, correlation IDs (`x-request-id`), structured CloudWatch logs, health checks. |
 | **Authentication & Security** | **HARDENED & TESTED** | Passwords hashed with **bcrypt**; strong production **JWT_SECRET** validation; SIWE **wallet challenge-response signature verification**; origin-restricted CORS allowlists. |
-| **Supply Chain State Machine**| **VERIFIED & TESTED** | Linear 5-state lifecycle (Created $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Sold) enforced on API and contract. |
+| **Supply Chain State Machine**| **VERIFIED & TESTED** | Linear 5-state lifecycle (Created $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Sold) with atomic conditional DB updates preventing race conditions. |
 | **Smart Contract (`AgriChain.sol`)** | **AUDITED & TESTED** | Solidity 0.8.24; **12/12 automated Hardhat unit tests passing** (access control, role registry, negative security). |
-| **Blockchain Receipt Verifier** | **IMPLEMENTED & TESTED** | Strict ABI event log decoding with ethers v6: destination contract check, expected event match, product ID match, actor identity checks, and anti-replay guards. |
-| **AWS CloudFormation IaC** | **CONFIGURED & VALIDATED** | `aws/cloudformation-template.yaml` declares S3, CloudFront OAC, App Runner, IAM execution roles, SNS topics, and CloudWatch 5xx Alarms. |
+| **Blockchain Receipt Verifier** | **HARDENED & TESTED** | Strict fail-closed verification with ethers v6: mandatory action & product ID checks, ABI event decoding, actor/recipient identity validation, zero permissive fallbacks. |
+| **AWS CloudFormation IaC** | **CONFIGURED (CLI VALIDATION NOT RUN)** | `aws/cloudformation-template.yaml` declares S3, CloudFront OAC, App Runner (ECR private, Secrets Manager ARNs), IAM execution roles, SNS, and CloudWatch 5xx Alarm. CLI validation was NOT RUN on this machine because AWS CLI is not installed. |
 | **AWS Live Cloud Deployment** | **PREPARED (PENDING RUN)** | Template ready for deployment; no billable cloud resources created without user approval. |
 | **Empirical Load Harness** | **BENCHMARKED (LOCAL)** | Zero-dependency local micro-benchmark (`load_test_native.js`): loopback API throughput, p50/p95 latency metrics, remote endpoint safety guards. |
 
@@ -183,6 +183,7 @@ aws cloudfront create-invalidation --distribution-id <DISTRIBUTION_ID> --paths "
 1. **The Agricultural Oracle Problem:** Blockchain immutability guarantees that once data is written, it cannot be tampered with or deleted. However, it cannot physically prove that the farmer entered truthful crop varieties at harvest time.
 2. **Sensor Hardware Attestation:** In the current prototype, cold-chain temperature readings are operator-entered or simulated. Production deployment requires hardware secure elements (e.g. TPM / ATECC608A) physically bound to refrigeration units.
 3. **Testnet Economic Security:** Sepolia testnet validators operate without financial stakes. Production deployment requires mainnet or an Ethereum Layer 2 rollup (e.g. Arbitrum, Optimism).
+4. **Dual-State Recovery Strategy & Absence of Autonomous Reconciler:** If an on-chain transaction succeeds on Ethereum Sepolia but the subsequent database update fails (e.g., transient database timeout or server restart), the MongoDB record remains at the prior state. Because the product is still in `expectedStatus` and the transaction hash has not been appended to `history`, the client can safely re-submit the request with the same `txHash` (client-driven retry). The API re-verifies the mined receipt and atomically applies the state transition. However, the system currently lacks a background event polling daemon to autonomously reconcile unrecorded transitions if a client disconnects and never retries.
 
 ---
 

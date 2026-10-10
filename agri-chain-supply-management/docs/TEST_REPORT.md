@@ -3,7 +3,7 @@
 **Evaluation Project:** Agriculture Supply Chain Traceability Platform  
 **Testing Environment:** Node.js v24.12.0, npm 11.6.2, Windows 11 Host, Vite 5.4, Hardhat 2.22  
 **Report Date:** October 2026  
-**Overall Status:** **39/39 Automated Tests Passing (100% Pass Rate across Backend & Smart Contract Suites), Frontend Bundle Built Cleanly**  
+**Overall Status:** **49/49 Automated Tests Passing (100% Pass Rate across Backend & Smart Contract Suites), Frontend Bundle Built Cleanly**
 
 ---
 
@@ -12,7 +12,7 @@
 | Component Suite | Test Harness | Tests Executed | Passed | Failed | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Backend API Security & Lifecycle** | `node:test` + native fetch | 12 | 12 | 0 | **PASS (100%)** |
-| **Blockchain Verification & SIWE** | `node:test` + ethers v6 | 15 | 15 | 0 | **PASS (100%)** |
+| **Blockchain Verification & Concurrency** | `node:test` + ethers v6 | 25 | 25 | 0 | **PASS (100%)** |
 | **Smart Contract Suite** | Hardhat / Mocha / Chai | 12 | 12 | 0 | **PASS (100%)** |
 | **Frontend Production Build** | Vite 5 (Rollup) | 279 modules | 279 | 0 | **PASS (Clean)** |
 | **Local Smoke Micro-Benchmark** | `load_test_native.js` | 100 requests | 100 | 0 | **PASS (0% Err)** |
@@ -37,7 +37,7 @@
   11. Complete Supply Chain Lifecycle execution: Farmer -> Distributor -> Retailer -> Consumer
   12. Traceability Verification Endpoint audits cryptographic proof chain
 
-### Suite 2: Blockchain Verification Correctness & Regression Suite (15 Tests)
+### Suite 2: Blockchain Verification, Fail-Closed Security & Concurrency Suite (25 Tests)
 * **Command:** `npm test` (inside `agri-chain-supply-management/backend`)
 * **Coverage:**
   1. Valid transaction, correct AgriChain contract, expected event, correct product ID and action
@@ -55,6 +55,17 @@
   13. Database lifecycle state remains unchanged after failed verification
   14. Duplicate transaction submissions do not create duplicate lifecycle transitions
   15. Cryptographic Wallet Challenge & ECDSA Signature Verification Flow (SIWE single-use nonce, anti-replay, signer recovery)
+  16. Missing or unsupported expectedAction is rejected with `UNSUPPORTED_ACTION` (fail closed)
+  17. Missing or invalid productId is rejected with `PRODUCT_ID_REQUIRED` (fail closed)
+  18. Missing mandatory actor identity is rejected with `ACTOR_IDENTITY_REQUIRED` (fail closed)
+  19. Missing mandatory recipient identity for transfers is rejected with `RECIPIENT_IDENTITY_REQUIRED` (fail closed)
+  20. Concurrency guard: Two simultaneous requests cannot both advance the same lifecycle state (one 200, one 409)
+  21. Production secret configuration fails safely without hardcoded fallback
+  22. CloudFormation ECR regex enforces private ECR URI format and rejects public ECR or hello-app-runner sample images
+  23. Production CONTRACT_ADDRESS configuration fails fast on malformed address
+  24. Production SEPOLIA_RPC_URL configuration validates URL scheme and supports fallback
+  25. CloudFormation template enforces KMS least privilege, RPC parameters, and alarm dependencies
+
 
 ### Suite 3: Hardhat Smart Contract Lifecycle & Access Control (12 Tests)
 * **Command:** `npx hardhat test` (inside `agri-chain-supply-management/blockchain`)
@@ -98,3 +109,6 @@
    * Live Sepolia transactions were **NOT SENT** during automated testing. Tests utilized Hardhat local EVM and cryptographic receipt fixtures based directly on the authoritative contract ABI.
 4. **External MongoDB Connection:**
    * Automated tests ran against the local resilient datastore sandbox. MongoDB Atlas connectivity requires internet egress and valid managed credentials.
+5. **Dual-State Recovery Strategy & Absence of Autonomous Reconciler:**
+   * **Client-Driven Retry Behavior:** If an on-chain transaction succeeds on Ethereum Sepolia but the subsequent database update fails (e.g., transient database timeout or server restart), the MongoDB record remains at the prior state. Because the product is still in `expectedStatus` and the transaction hash has not been saved in `history`, the client can safely re-submit the request with the same `txHash`. The endpoint re-verifies the mined receipt and atomically applies the state transition.
+   * **Absence of Autonomous Reconciler:** The system does not currently feature a background polling daemon to automatically query smart contract state and backfill unrecorded transitions if a client disconnects and never retries.

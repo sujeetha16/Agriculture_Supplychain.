@@ -37,6 +37,10 @@ const historySchema = new mongoose.Schema({
       "ACTOR_MISMATCH",
       "INVALID_HASH_FORMAT",
       "DEMO_PROHIBITED_IN_PRODUCTION",
+      "UNSUPPORTED_ACTION",
+      "PRODUCT_ID_REQUIRED",
+      "ACTOR_IDENTITY_REQUIRED",
+      "RECIPIENT_IDENTITY_REQUIRED",
       "UNVERIFIED"
     ],
     default: "UNVERIFIED"
@@ -106,6 +110,10 @@ const productSchema = new mongoose.Schema({
       "ACTOR_MISMATCH",
       "INVALID_HASH_FORMAT",
       "DEMO_PROHIBITED_IN_PRODUCTION",
+      "UNSUPPORTED_ACTION",
+      "PRODUCT_ID_REQUIRED",
+      "ACTOR_IDENTITY_REQUIRED",
+      "RECIPIENT_IDENTITY_REQUIRED",
       "UNVERIFIED"
     ],
     default: "UNVERIFIED"
@@ -228,6 +236,51 @@ const LocalProductRepository = {
       found = items.find((p) => Number(p.productId) === Number(query.productId));
     }
     return wrapProductDocument(found);
+  },
+
+  findOneAndUpdate: async (filter = {}, update = {}, options = {}) => {
+    const items = readLocalProducts();
+    const idx = items.findIndex((item) => {
+      if (filter.productId !== undefined && Number(item.productId) !== Number(filter.productId)) {
+        return false;
+      }
+      if (filter.status !== undefined && item.status !== filter.status) {
+        return false;
+      }
+      if (filter["history.txHash"] && filter["history.txHash"].$ne) {
+        const neHash = filter["history.txHash"].$ne;
+        if (Array.isArray(item.history) && item.history.some((h) => h.txHash === neHash)) {
+          return false;
+        }
+      }
+      if (filter.qrBlockchainHash && filter.qrBlockchainHash.$ne) {
+        if (item.qrBlockchainHash === filter.qrBlockchainHash.$ne) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    if (idx === -1) {
+      return null;
+    }
+
+    const doc = items[idx];
+    if (update.$set) {
+      Object.assign(doc, update.$set);
+    }
+    if (update.$push) {
+      for (const [key, val] of Object.entries(update.$push)) {
+        if (!Array.isArray(doc[key])) {
+          doc[key] = [];
+        }
+        doc[key].push(val);
+      }
+    }
+    doc.updatedAt = new Date().toISOString();
+    items[idx] = doc;
+    writeLocalProducts(items);
+    return wrapProductDocument(doc);
   },
 
   create: async (data) => {

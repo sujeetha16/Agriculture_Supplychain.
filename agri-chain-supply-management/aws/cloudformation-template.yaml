@@ -18,25 +18,49 @@ Parameters:
   BackendImageIdentifier:
     Type: String
     Description: >
-      Required ECR image URI for the containerized Express API
+      Required private Amazon ECR image URI for the containerized Express API
       (e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/agri-chain-backend:latest).
-      Do NOT use sample hello-app-runner images in production.
-    AllowedPattern: '^(\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com\/|public\.ecr\.aws\/).+$'
-    ConstraintDescription: Must be a valid Amazon ECR or Public ECR image URI.
-  JwtSecretParameter:
+      Must NOT use public ECR (public.ecr.aws/...) or hello-app-runner sample images,
+      as this service is configured with private ECR authentication (ImageRepositoryType: ECR).
+    AllowedPattern: '^\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com\/[a-z0-9._\/-]+:[a-zA-Z0-9._-]+$'
+    ConstraintDescription: >
+      Must be a valid private Amazon ECR image URI including 12-digit account ID, region, repository, and tag
+      (e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/agri-chain-backend:latest).
+  JwtSecretArn:
     Type: String
-    NoEcho: true
-    MinLength: 32
-    MaxLength: 256
     Description: >
-      Cryptographic secret key for signing JWT authentication tokens (minimum 32 characters).
-      Must be provided securely at stack creation or injected via AWS Secrets Manager.
-  DatabaseConnectionString:
+      AWS Secrets Manager Secret ARN containing the production JWT signing key (minimum 32 characters).
+      Injected securely into App Runner via RuntimeEnvironmentSecrets without exposing secret text in templates.
+  DatabaseSecretArn:
     Type: String
-    NoEcho: true
     Description: >
-      Managed TLS MongoDB Atlas or AWS DocumentDB connection string with credentials.
-      Must be provided securely at stack creation.
+      AWS Secrets Manager Secret ARN containing the production MongoDB Atlas or DocumentDB connection URI.
+      Injected securely into App Runner via RuntimeEnvironmentSecrets without exposing credentials in templates.
+  KmsKeyArn:
+    Type: String
+    Default: ""
+    Description: >
+      Optional AWS KMS Key ARN used to encrypt the Secrets Manager secrets (required only if using a Customer-Managed KMS Key).
+      Leave blank if secrets use the default AWS-managed key (aws/secretsmanager).
+  ContractAddress:
+    Type: String
+    Default: "0xB601FDccec475b61B8Bc9f3661eC4F73B7499a2D"
+    Description: >
+      Deployed AgriChain smart contract address on Ethereum Sepolia.
+    AllowedPattern: '^0x[a-fA-F0-9]{40}$'
+    ConstraintDescription: Must be a valid 42-character Ethereum hex address starting with 0x.
+  SepoliaRpcSecretArn:
+    Type: String
+    Default: ""
+    Description: >
+      Optional AWS Secrets Manager Secret ARN containing the Ethereum Sepolia JSON-RPC URL (recommended if the endpoint includes a secret API key).
+      Injected into App Runner as SEPOLIA_RPC_URL. If blank, the service uses built-in public Sepolia gateways.
+  SepoliaRpcUrl:
+    Type: String
+    Default: ""
+    Description: >
+      Optional public or non-sensitive Ethereum Sepolia JSON-RPC URL. Used only if SepoliaRpcSecretArn is blank.
+      If both are blank, the backend falls back to its resilient built-in public Sepolia RPC gateway list.
   FrontendAllowedOrigins:
     Type: String
     Default: ""
@@ -51,6 +75,9 @@ Parameters:
 Conditions:
   HasCustomAllowedOrigins: !Not [!Equals [!Ref FrontendAllowedOrigins, ""]]
   HasNotificationEmail: !Not [!Equals [!Ref AlarmNotificationEmail, ""]]
+  HasCustomKmsKey: !Not [!Equals [!Ref KmsKeyArn, ""]]
+  HasSepoliaRpcSecret: !Not [!Equals [!Ref SepoliaRpcSecretArn, ""]]
+  HasCustomRpcUrl: !Not [!Equals [!Ref SepoliaRpcUrl, ""]]
 
 Resources:
   # 1. Private S3 Storage Bucket for SPA Frontend Artifacts
@@ -84,19 +111,7 @@ Resources:
         SigningBehavior: always
         SigningProtocol: sigv4
 
-  # 3. CloudWatch Log Group for Structured Application Logs
-  AppCloudWatchLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/apprunner/${ProjectName}-${Environment}"
-      RetentionInDays: 30
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-        - Key: Environment
-          Value: !Ref Environment
-
-  # 4. IAM Role for App Runner Instance Execution & CloudWatch Logging
+  # 3. IAM Role for App Runner Instance Execution & Secrets Manager Access
   AppRunnerInstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -110,19 +125,39 @@ Resources:
                 - tasks.apprunner.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: AppRunnerCloudWatchLogsPolicy
+        # Least-privilege Secrets Manager access for runtime secret injection
+        - PolicyName: AppRunnerSecretsManagerPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                  - logs:DescribeLogStreams
-                Resource: !GetAtt AppCloudWatchLogGroup.Arn
+                  - secretsmanager:GetSecretValue
+                Resource: !If
+                  - HasSepoliaRpcSecret
+                  - - !Ref JwtSecretArn
+                    - !Ref DatabaseSecretArn
+                    - !Ref SepoliaRpcSecretArn
+                  - - !Ref JwtSecretArn
+                    - !Ref DatabaseSecretArn
 
-  # 5. IAM Role for App Runner ECR Access
+  # 4. Conditional IAM Policy for Customer-Managed KMS Key (CMK) Decryption
+  AppRunnerKmsDecryptPolicy:
+    Type: AWS::IAM::Policy
+    Condition: HasCustomKmsKey
+    Properties:
+      PolicyName: AppRunnerKmsDecryptPolicy
+      Roles:
+        - !Ref AppRunnerInstanceRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - kms:Decrypt
+            Resource: !Ref KmsKeyArn
+
+  # 5. IAM Role for App Runner ECR Access (Private ECR Pull)
   AppRunnerECRAccessRole:
     Type: AWS::IAM::Role
     Properties:
@@ -219,15 +254,22 @@ Resources:
                 Value: production
               - Name: PORT
                 Value: "5000"
-              - Name: JWT_SECRET
-                Value: !Ref JwtSecretParameter
-              - Name: MONGODB_URI
-                Value: !Ref DatabaseConnectionString
               - Name: ALLOWED_ORIGINS
                 Value: !If
                   - HasCustomAllowedOrigins
                   - !Ref FrontendAllowedOrigins
                   - !Sub "https://${CloudFrontDistribution.DomainName}"
+              - Name: CONTRACT_ADDRESS
+                Value: !Ref ContractAddress
+              - Name: SEPOLIA_PUBLIC_RPC_URL
+                Value: !If
+                  - HasCustomRpcUrl
+                  - !Ref SepoliaRpcUrl
+                  - ""
+            RuntimeEnvironmentSecrets:
+              JWT_SECRET: !Ref JwtSecretArn
+              MONGODB_URI: !Ref DatabaseSecretArn
+              SEPOLIA_RPC_URL: !If [HasSepoliaRpcSecret, !Ref SepoliaRpcSecretArn, !Ref "AWS::NoValue"]
       InstanceConfiguration:
         Cpu: "1024" # 1 vCPU
         Memory: "2048" # 2 GB RAM
@@ -245,7 +287,7 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # 9. Amazon SNS Topic for Operational Alarms (Optional, provisioned when email is provided)
+  # 8. Amazon SNS Topic for Operational Alarms (Optional, provisioned when email is provided)
   AlarmNotificationTopic:
     Type: AWS::SNS::Topic
     Condition: HasNotificationEmail
@@ -255,9 +297,10 @@ Resources:
         - Endpoint: !Ref AlarmNotificationEmail
           Protocol: email
 
-  # 10. CloudWatch Metric Alarm for Backend 5xx Server Errors
+  # 9. CloudWatch Metric Alarm for Backend 5xx Server Errors
   Backend5xxErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
+    DependsOn: BackendAppRunnerService
     Properties:
       AlarmName: !Sub "${ProjectName}-backend-5xx-alarm-${Environment}"
       AlarmDescription: Triggers when the App Runner backend experiences elevated HTTP 5xx error rates.
@@ -272,8 +315,7 @@ Resources:
         - Name: ServiceName
           Value: !Sub "${ProjectName}-api-${Environment}"
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !If [HasNotificationEmail, !Ref AlarmNotificationTopic, !Ref "AWS::NoValue"]
+      AlarmActions: !If [HasNotificationEmail, [!Ref AlarmNotificationTopic], !Ref "AWS::NoValue"]
 
 Outputs:
   CloudFrontDistributionURL:

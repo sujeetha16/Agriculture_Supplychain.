@@ -5,12 +5,35 @@ const fs = require("fs");
 const path = require("path");
 const { ethers } = require("ethers");
 
-const SEPOLIA_RPC_URLS = [
-  process.env.SEPOLIA_RPC_URL,
-  "https://ethereum-sepolia-rpc.publicnode.com",
-  "https://rpc.sepolia.org",
-  "https://gateway.tenderly.co/public/sepolia"
-].filter(Boolean);
+function resolveSepoliaRpcUrls() {
+  const configuredRpcUrl = (
+    process.env.SEPOLIA_RPC_URL ||
+    process.env.SEPOLIA_PUBLIC_RPC_URL ||
+    ""
+  ).trim();
+
+  const isProduction = process.env.NODE_ENV === "production";
+  if (configuredRpcUrl) {
+    if (!/^https?:\/\//i.test(configuredRpcUrl)) {
+      if (isProduction) {
+        throw new Error(
+          `[CRITICAL] Invalid SEPOLIA_RPC_URL '${configuredRpcUrl}'. Must be a valid HTTP or HTTPS JSON-RPC endpoint URL.`
+        );
+      }
+      console.warn(`[BlockchainVerifier] Malformed SEPOLIA_RPC_URL '${configuredRpcUrl}'; falling back to community gateways.`);
+    }
+  }
+
+  const validConfigured = configuredRpcUrl && /^https?:\/\//i.test(configuredRpcUrl) ? configuredRpcUrl : null;
+  return [
+    validConfigured,
+    "https://ethereum-sepolia-rpc.publicnode.com",
+    "https://rpc.sepolia.org",
+    "https://gateway.tenderly.co/public/sepolia"
+  ].filter(Boolean);
+}
+
+const SEPOLIA_RPC_URLS = resolveSepoliaRpcUrls();
 
 // Locate AgriChain artifact ABI safely across environments
 function loadArtifact() {
@@ -34,12 +57,29 @@ function loadArtifact() {
 const artifact = loadArtifact();
 const contractInterface = new ethers.Interface(artifact.abi || []);
 
-const CONFIGURED_CONTRACT_ADDRESS = (
-  process.env.CONTRACT_ADDRESS ||
-  process.env.VITE_CONTRACT_ADDRESS ||
-  artifact.address ||
-  "0xB601FDccec475b61B8Bc9f3661eC4F73B7499a2D"
-).toLowerCase();
+function resolveContractAddress() {
+  const raw = (
+    process.env.CONTRACT_ADDRESS ||
+    process.env.VITE_CONTRACT_ADDRESS ||
+    artifact.address ||
+    "0xB601FDccec475b61B8Bc9f3661eC4F73B7499a2D"
+  ).trim();
+
+  const isProduction = process.env.NODE_ENV === "production";
+  if (!ethers.isAddress(raw)) {
+    if (isProduction) {
+      throw new Error(
+        `[CRITICAL] Invalid Ethereum contract address '${raw}'. CONTRACT_ADDRESS must be a valid 42-character hex address.`
+      );
+    }
+    console.warn(`[BlockchainVerifier] Malformed contract address '${raw}'; falling back to artifact default.`);
+    return (artifact.address || "0xB601FDccec475b61B8Bc9f3661eC4F73B7499a2D").toLowerCase();
+  }
+
+  return raw.toLowerCase();
+}
+
+const CONFIGURED_CONTRACT_ADDRESS = resolveContractAddress();
 
 /**
  * Mapping of Supply-Chain Lifecycle actions to exact AgriChain Solidity event signatures & roles
@@ -242,7 +282,40 @@ async function verifyTransaction(txHash, options = {}) {
       };
     }
 
-    // 3. Inspect logs emitted by the exact AgriChain contract
+    // 3. Fail closed: Reject missing, invalid, or unsupported expected action before inspecting transaction logs
+    const actionKey = normalizeActionKey(options.expectedAction);
+    if (!options.expectedAction || !actionKey || !ACTION_EVENT_MAP[actionKey]) {
+      return {
+        status: "UNSUPPORTED_ACTION",
+        verified: false,
+        isSimulated: false,
+        txHash,
+        expectedAction: options.expectedAction || null,
+        message: `Expected lifecycle action '${options.expectedAction || "missing"}' is missing, invalid, or unsupported.`
+      };
+    }
+    const actionConfig = ACTION_EVENT_MAP[actionKey];
+
+    // 4. Fail closed: Require valid expected product ID for supply chain lifecycle action
+    if (
+      options.productId === undefined ||
+      options.productId === null ||
+      String(options.productId).trim() === "" ||
+      isNaN(Number(options.productId)) ||
+      Number(options.productId) <= 0
+    ) {
+      return {
+        status: "PRODUCT_ID_REQUIRED",
+        verified: false,
+        isSimulated: false,
+        txHash,
+        expectedAction: actionKey,
+        message: "Mandatory product ID is missing or invalid for lifecycle verification."
+      };
+    }
+    const expectedProductIdStr = String(options.productId);
+
+    // 5. Inspect logs emitted strictly by the configured AgriChain contract
     const allLogs = Array.isArray(receipt.logs) ? receipt.logs : [];
     const contractLogs = allLogs.filter(
       (log) => (log.address || "").toLowerCase() === expectedContract
@@ -255,14 +328,12 @@ async function verifyTransaction(txHash, options = {}) {
         isSimulated: false,
         txHash,
         blockNumber: parseBlockNumber(receipt.blockNumber),
+        expectedEvent: actionConfig.eventName,
         message: `No event logs found in transaction receipt matching AgriChain contract (${expectedContract}).`
       };
     }
 
-    // 4. Resolve action requirements
-    const actionKey = normalizeActionKey(options.expectedAction);
-    const actionConfig = actionKey ? ACTION_EVENT_MAP[actionKey] : null;
-
+    // 6. Require the EXACT event corresponding to requested action (no permissive fallback)
     let matchedParsedLog = null;
     let anyAgriChainEventFound = null;
 
@@ -274,12 +345,7 @@ async function verifyTransaction(txHash, options = {}) {
         });
         if (parsed) {
           anyAgriChainEventFound = parsed;
-          if (actionConfig) {
-            if (parsed.name === actionConfig.eventName) {
-              matchedParsedLog = parsed;
-              break;
-            }
-          } else {
+          if (parsed.name === actionConfig.eventName) {
             matchedParsedLog = parsed;
             break;
           }
@@ -289,8 +355,7 @@ async function verifyTransaction(txHash, options = {}) {
       }
     }
 
-    // 5. Verify expected event presence & action correspondence
-    if (actionConfig && !matchedParsedLog) {
+    if (!matchedParsedLog) {
       if (anyAgriChainEventFound) {
         return {
           status: "ACTION_MISMATCH",
@@ -298,7 +363,7 @@ async function verifyTransaction(txHash, options = {}) {
           isSimulated: false,
           txHash,
           blockNumber: parseBlockNumber(receipt.blockNumber),
-          expectedAction: options.expectedAction,
+          expectedAction: actionKey,
           expectedEvent: actionConfig.eventName,
           foundEvent: anyAgriChainEventFound.name,
           message: `Transaction emitted '${anyAgriChainEventFound.name}' instead of expected lifecycle event '${actionConfig.eventName}'.`
@@ -315,72 +380,78 @@ async function verifyTransaction(txHash, options = {}) {
       };
     }
 
-    if (!matchedParsedLog) {
-      return {
-        status: "EXPECTED_EVENT_MISSING",
-        verified: false,
-        isSimulated: false,
-        txHash,
-        blockNumber: parseBlockNumber(receipt.blockNumber),
-        message: "No recognized AgriChain event found in transaction receipt logs."
-      };
-    }
-
-    // 6. Verify Product ID match
+    // 7. Verify Product ID match
     const eventProductId = matchedParsedLog.args.productId !== undefined
       ? matchedParsedLog.args.productId.toString()
       : null;
 
-    if (options.productId !== undefined && options.productId !== null) {
-      const expectedProductIdStr = String(options.productId);
-      if (eventProductId !== expectedProductIdStr) {
+    if (eventProductId !== expectedProductIdStr) {
+      return {
+        status: "PRODUCT_ID_MISMATCH",
+        verified: false,
+        isSimulated: false,
+        txHash,
+        blockNumber: parseBlockNumber(receipt.blockNumber),
+        eventProductId,
+        expectedProductId: expectedProductIdStr,
+        message: `On-chain event product ID (${eventProductId}) does not match expected product ID (${expectedProductIdStr}).`
+      };
+    }
+
+    // 8. Verify Actor / Signer identity against on-chain indexed parameters
+    const expectedActor = (options.expectedActor || options.actorAddress || options.farmer);
+    if (actionConfig.actorField) {
+      if (!expectedActor) {
         return {
-          status: "PRODUCT_ID_MISMATCH",
+          status: "ACTOR_IDENTITY_REQUIRED",
           verified: false,
           isSimulated: false,
           txHash,
-          blockNumber: parseBlockNumber(receipt.blockNumber),
-          eventProductId,
-          expectedProductId: expectedProductIdStr,
-          message: `On-chain event product ID (${eventProductId}) does not match expected product ID (${expectedProductIdStr}).`
+          field: actionConfig.actorField,
+          message: `Mandatory actor identity (${actionConfig.actorField}) is required for verifying '${actionKey}'.`
         };
       }
-    }
-
-    // 7. Verify Actor / Signer identity against on-chain indexed parameters
-    const expectedActor = (options.expectedActor || options.actorAddress || options.farmer);
-    if (expectedActor && actionConfig && actionConfig.actorField) {
       const onChainActor = matchedParsedLog.args[actionConfig.actorField];
-      if (onChainActor && onChainActor.toLowerCase() !== expectedActor.toLowerCase()) {
+      if (!onChainActor || onChainActor.toLowerCase() !== expectedActor.toLowerCase()) {
         return {
           status: "ACTOR_MISMATCH",
           verified: false,
           isSimulated: false,
           txHash,
           blockNumber: parseBlockNumber(receipt.blockNumber),
-          onChainActor: onChainActor.toLowerCase(),
+          onChainActor: onChainActor ? onChainActor.toLowerCase() : null,
           expectedActor: expectedActor.toLowerCase(),
           field: actionConfig.actorField,
-          message: `On-chain event actor (${onChainActor.toLowerCase()}) does not match expected actor (${expectedActor.toLowerCase()}).`
+          message: `On-chain event actor (${onChainActor ? onChainActor.toLowerCase() : "none"}) does not match expected actor (${expectedActor.toLowerCase()}).`
         };
       }
     }
 
-    // 8. Verify Receiver identity against on-chain indexed parameters (if applicable)
-    const expectedReceiver = (options.expectedReceiver || options.receiverAddress);
-    if (expectedReceiver && actionConfig && actionConfig.hasReceiver && actionConfig.receiverField) {
+    // 9. Verify Receiver identity against on-chain indexed parameters (if applicable)
+    if (actionConfig.hasReceiver && actionConfig.receiverField) {
+      const expectedReceiver = (options.expectedReceiver || options.receiverAddress);
+      if (!expectedReceiver) {
+        return {
+          status: "RECIPIENT_IDENTITY_REQUIRED",
+          verified: false,
+          isSimulated: false,
+          txHash,
+          field: actionConfig.receiverField,
+          message: `Mandatory recipient identity (${actionConfig.receiverField}) is required for verifying '${actionKey}'.`
+        };
+      }
       const onChainReceiver = matchedParsedLog.args[actionConfig.receiverField];
-      if (onChainReceiver && onChainReceiver.toLowerCase() !== expectedReceiver.toLowerCase()) {
+      if (!onChainReceiver || onChainReceiver.toLowerCase() !== expectedReceiver.toLowerCase()) {
         return {
           status: "ACTOR_MISMATCH",
           verified: false,
           isSimulated: false,
           txHash,
           blockNumber: parseBlockNumber(receipt.blockNumber),
-          onChainReceiver: onChainReceiver.toLowerCase(),
+          onChainReceiver: onChainReceiver ? onChainReceiver.toLowerCase() : null,
           expectedReceiver: expectedReceiver.toLowerCase(),
           field: actionConfig.receiverField,
-          message: `On-chain event recipient (${onChainReceiver.toLowerCase()}) does not match expected recipient (${expectedReceiver.toLowerCase()}).`
+          message: `On-chain event recipient (${onChainReceiver ? onChainReceiver.toLowerCase() : "none"}) does not match expected recipient (${expectedReceiver.toLowerCase()}).`
         };
       }
     }
@@ -398,7 +469,7 @@ async function verifyTransaction(txHash, options = {}) {
       contractVerified: true,
       contractAddress: expectedContract,
       event: matchedParsedLog.name,
-      productId: eventProductId ? Number(eventProductId) : null,
+      productId: Number(eventProductId),
       message: "Cryptographically verified on Ethereum Sepolia ledger."
     };
   } catch (err) {
@@ -420,5 +491,7 @@ module.exports = {
   SEPOLIA_RPC_URLS,
   ACTION_EVENT_MAP,
   normalizeActionKey,
-  contractInterface
+  contractInterface,
+  resolveSepoliaRpcUrls,
+  resolveContractAddress
 };

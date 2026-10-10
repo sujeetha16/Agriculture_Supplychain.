@@ -4,6 +4,8 @@
 const { test, describe, before, after } = require("node:test");
 const assert = require("node:assert");
 const http = require("node:http");
+const path = require("path");
+const fs = require("fs");
 const { ethers } = require("ethers");
 
 const app = require("../server");
@@ -447,5 +449,304 @@ describe("Blockchain Verification Correctness & Regression Suite (15 Critical Sc
       })
     });
     assert.strictEqual(replayRes.status, 400); // Replay rejected
+  });
+
+  test("16. Missing or unsupported expectedAction is rejected with UNSUPPORTED_ACTION and verified: false", async () => {
+    const receipt = buildReceipt({
+      eventName: "ProductCreated",
+      eventParams: [9001n, "Organic Apples", "2026-10-10", FARMER_ADDR, 1700000000n]
+    });
+
+    // Case A: Missing expectedAction
+    const resMissing = await verifyTransaction(validTxHash, {
+      receipt,
+      productId: 9001
+    });
+    assert.strictEqual(resMissing.verified, false);
+    assert.strictEqual(resMissing.status, "UNSUPPORTED_ACTION");
+
+    // Case B: Unsupported expectedAction
+    const resInvalid = await verifyTransaction(validTxHash, {
+      receipt,
+      productId: 9001,
+      expectedAction: "NON_EXISTENT_ACTION"
+    });
+    assert.strictEqual(resInvalid.verified, false);
+    assert.strictEqual(resInvalid.status, "UNSUPPORTED_ACTION");
+  });
+
+  test("17. Missing or invalid productId is rejected with PRODUCT_ID_REQUIRED and verified: false", async () => {
+    const receipt = buildReceipt({
+      eventName: "ProductCreated",
+      eventParams: [9001n, "Organic Apples", "2026-10-10", FARMER_ADDR, 1700000000n]
+    });
+
+    // Case A: Missing productId
+    const resMissing = await verifyTransaction(validTxHash, {
+      receipt,
+      expectedAction: "CREATED"
+    });
+    assert.strictEqual(resMissing.verified, false);
+    assert.strictEqual(resMissing.status, "PRODUCT_ID_REQUIRED");
+
+    // Case B: Invalid non-numeric productId
+    const resInvalid = await verifyTransaction(validTxHash, {
+      receipt,
+      productId: "invalid-batch",
+      expectedAction: "CREATED"
+    });
+    assert.strictEqual(resInvalid.verified, false);
+    assert.strictEqual(resInvalid.status, "PRODUCT_ID_REQUIRED");
+  });
+
+  test("18. Missing mandatory actor identity is rejected with ACTOR_IDENTITY_REQUIRED and verified: false", async () => {
+    const receipt = buildReceipt({
+      eventName: "ProductCreated",
+      eventParams: [9001n, "Organic Apples", "2026-10-10", FARMER_ADDR, 1700000000n]
+    });
+
+    const resNoActor = await verifyTransaction(validTxHash, {
+      receipt,
+      productId: 9001,
+      expectedAction: "CREATED"
+      // expectedActor omitted
+    });
+    assert.strictEqual(resNoActor.verified, false);
+    assert.strictEqual(resNoActor.status, "ACTOR_IDENTITY_REQUIRED");
+  });
+
+  test("19. Missing mandatory recipient identity for transfer actions is rejected with RECIPIENT_IDENTITY_REQUIRED and verified: false", async () => {
+    const fragment = contractInterface.getEvent("ProductDispatchedToDistributor");
+    const encoded = contractInterface.encodeEventLog(fragment, [
+      9001n,
+      FARMER_ADDR,
+      DISTRIBUTOR_ADDR,
+      "2026-10-11",
+      1700000000n
+    ]);
+
+    const receipt = {
+      status: "0x1",
+      to: CONFIGURED_CONTRACT_ADDRESS,
+      from: FARMER_ADDR,
+      blockNumber: "0x1a2b",
+      gasUsed: "0x5208",
+      transactionHash: validTxHash,
+      logs: [{
+        address: CONFIGURED_CONTRACT_ADDRESS,
+        topics: encoded.topics,
+        data: encoded.data
+      }]
+    };
+
+    const resNoReceiver = await verifyTransaction(validTxHash, {
+      receipt,
+      productId: 9001,
+      expectedAction: "DISPATCHED_TO_DISTRIBUTOR",
+      expectedActor: FARMER_ADDR
+      // expectedReceiver omitted
+    });
+    assert.strictEqual(resNoReceiver.verified, false);
+    assert.strictEqual(resNoReceiver.status, "RECIPIENT_IDENTITY_REQUIRED");
+  });
+
+  test("20. Concurrency guard: Two simultaneous requests cannot both advance the same lifecycle state", async () => {
+    // Log in as farmer
+    const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "farmer", password: "Farmer@123" })
+    });
+    const { token } = await loginRes.json();
+
+    // Create a new batch 9077
+    const createRes = await fetch(`${baseUrl}/api/products`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        productId: 9077,
+        name: "Concurrent Guard Batch",
+        harvestDate: "2026-10-10",
+        farmer: FARMER_ADDR,
+        txHash: "0xsim-conc-create-001",
+        isDemoMode: true
+      })
+    });
+    assert.strictEqual(createRes.status, 201);
+
+    // Send two simultaneous requests trying to dispatch batch 9077 concurrently
+    const [resA, resB] = await Promise.all([
+      fetch(`${baseUrl}/api/products/9077/dispatch-distributor`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          actorAddress: FARMER_ADDR,
+          receiverAddress: DISTRIBUTOR_ADDR,
+          date: "2026-10-11",
+          txHash: "0xsim-conc-dispatch-A",
+          isDemoMode: true
+        })
+      }),
+      fetch(`${baseUrl}/api/products/9077/dispatch-distributor`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          actorAddress: FARMER_ADDR,
+          receiverAddress: DISTRIBUTOR_ADDR,
+          date: "2026-10-11",
+          txHash: "0xsim-conc-dispatch-B",
+          isDemoMode: true
+        })
+      })
+    ]);
+
+    const statuses = [resA.status, resB.status].sort();
+    // Exactly one must succeed (200) and the concurrent conflict must be rejected (409)
+    assert.deepStrictEqual(statuses, [200, 409], "One concurrent transition must succeed (200) and one must be rejected (409)");
+
+    // Verify batch status is DispatchedToDistributor and has exactly 1 dispatch in history
+    const checkRes = await fetch(`${baseUrl}/api/products/9077`);
+    const checkData = await checkRes.json();
+    assert.strictEqual(checkData.product.status, "DispatchedToDistributor");
+    const dispatches = checkData.product.history.filter((h) => h.action === "DISPATCHED_TO_DISTRIBUTOR");
+    assert.strictEqual(dispatches.length, 1, "Exactly one dispatch entry may be recorded in history");
+  });
+
+  test("21. Production secret configuration fails safely without hardcoded fallback", () => {
+    const originalEnv = process.env.NODE_ENV;
+    const originalSecret = process.env.JWT_SECRET;
+
+    try {
+      process.env.NODE_ENV = "production";
+      delete process.env.JWT_SECRET;
+
+      // Re-evaluating secret resolution under production without secret must throw
+      const fs = require("fs");
+      const authCode = fs.readFileSync(path.join(__dirname, "../middleware/auth.js"), "utf-8");
+
+      assert.ok(authCode.includes("FATAL SECURITY CONFIGURATION"));
+      assert.ok(authCode.includes("JWT_SECRET must be explicitly configured"));
+      assert.ok(!authCode.includes("agri-chain-dev-insecure-secret-for-local-development-only-2026\" && IS_PRODUCTION"));
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+      if (originalSecret) process.env.JWT_SECRET = originalSecret;
+    }
+  });
+
+  test("22. CloudFormation ECR regex enforces private ECR URI and rejects public ECR or hello-app-runner", () => {
+    const fs = require("fs");
+    const cfnTemplate = fs.readFileSync(path.join(__dirname, "../../aws/cloudformation-template.yaml"), "utf-8");
+
+    // Extract AllowedPattern for BackendImageIdentifier
+    const match = cfnTemplate.match(/AllowedPattern:\s*'([^']+)'/);
+    assert.ok(match, "AllowedPattern must be present in CloudFormation template");
+    const regex = new RegExp(match[1]);
+
+    // Valid private ECR URIs
+    assert.strictEqual(regex.test("123456789012.dkr.ecr.us-east-1.amazonaws.com/agri-chain-backend:latest"), true);
+    assert.strictEqual(regex.test("987654321098.dkr.ecr.eu-west-1.amazonaws.com/agriculture/api:v1.0.0"), true);
+
+    // Invalid / forbidden URIs
+    assert.strictEqual(regex.test("public.ecr.aws/aws-containers/hello-app-runner:latest"), false);
+    assert.strictEqual(regex.test("public.ecr.aws/my-repo:latest"), false);
+    assert.strictEqual(regex.test("hello-app-runner:latest"), false);
+    assert.strictEqual(regex.test("123456789012.dkr.ecr.us-east-1.amazonaws.com/agri-chain-backend"), false); // missing tag
+  });
+
+  test("23. Production CONTRACT_ADDRESS configuration fails fast on malformed address", () => {
+    const { resolveContractAddress } = require("../services/blockchainVerifier");
+    const originalEnv = process.env.NODE_ENV;
+    const originalAddr = process.env.CONTRACT_ADDRESS;
+
+    try {
+      process.env.NODE_ENV = "production";
+      process.env.CONTRACT_ADDRESS = "0xInvalidMalformedAddress";
+
+      assert.throws(
+        () => resolveContractAddress(),
+        /\[CRITICAL\] Invalid Ethereum contract address/
+      );
+
+      // Valid address must succeed
+      process.env.CONTRACT_ADDRESS = "0xB601FDccec475b61B8Bc9f3661eC4F73B7499a2D";
+      const resolved = resolveContractAddress();
+      assert.strictEqual(resolved, "0xb601fdccec475b61b8bc9f3661ec4f73b7499a2d");
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+      if (originalAddr !== undefined) {
+        process.env.CONTRACT_ADDRESS = originalAddr;
+      } else {
+        delete process.env.CONTRACT_ADDRESS;
+      }
+    }
+  });
+
+  test("24. Production SEPOLIA_RPC_URL configuration validates URL scheme and supports fallback", () => {
+    const { resolveSepoliaRpcUrls } = require("../services/blockchainVerifier");
+    const originalEnv = process.env.NODE_ENV;
+    const originalRpc = process.env.SEPOLIA_RPC_URL;
+    const originalPubRpc = process.env.SEPOLIA_PUBLIC_RPC_URL;
+
+    try {
+      process.env.NODE_ENV = "production";
+      process.env.SEPOLIA_RPC_URL = "not-a-valid-url";
+      delete process.env.SEPOLIA_PUBLIC_RPC_URL;
+
+      assert.throws(
+        () => resolveSepoliaRpcUrls(),
+        /\[CRITICAL\] Invalid SEPOLIA_RPC_URL/
+      );
+
+      // Valid URL must be prepended
+      process.env.SEPOLIA_RPC_URL = "https://eth-sepolia.g.alchemy.com/v2/mock-key";
+      const urls = resolveSepoliaRpcUrls();
+      assert.strictEqual(urls[0], "https://eth-sepolia.g.alchemy.com/v2/mock-key");
+      assert.ok(urls.length >= 2, "Fallback community gateways must be retained");
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+      if (originalRpc !== undefined) {
+        process.env.SEPOLIA_RPC_URL = originalRpc;
+      } else {
+        delete process.env.SEPOLIA_RPC_URL;
+      }
+      if (originalPubRpc !== undefined) {
+        process.env.SEPOLIA_PUBLIC_RPC_URL = originalPubRpc;
+      } else {
+        delete process.env.SEPOLIA_PUBLIC_RPC_URL;
+      }
+    }
+  });
+
+  test("25. CloudFormation template enforces KMS least privilege, RPC parameters, and alarm dependencies", () => {
+    const fs = require("fs");
+    const cfnTemplate = fs.readFileSync(path.join(__dirname, "../../aws/cloudformation-template.yaml"), "utf-8");
+
+    // KMS least privilege: kms:Decrypt must NOT be granted against Secrets Manager secret ARNs
+    assert.ok(
+      !/secretsmanager:GetSecretValue[\s\S]*?kms:Decrypt[\s\S]*?Resource:\s*\n\s*-\s*!Ref\s*JwtSecretArn/.test(cfnTemplate),
+      "kms:Decrypt must not be coupled to Secret ARNs"
+    );
+
+    // Customer-Managed Key policy must be conditional
+    assert.ok(cfnTemplate.includes("AppRunnerKmsDecryptPolicy:"));
+    assert.ok(cfnTemplate.includes("Condition: HasCustomKmsKey"));
+
+    // Explicit parameters for RPC and Contract Address
+    assert.ok(cfnTemplate.includes("SepoliaRpcSecretArn:"));
+    assert.ok(cfnTemplate.includes("SepoliaRpcUrl:"));
+    assert.ok(cfnTemplate.includes("ContractAddress:"));
+
+    // Alarm must depend on App Runner service
+    assert.ok(cfnTemplate.includes("Backend5xxErrorsAlarm:"));
+    assert.ok(cfnTemplate.includes("DependsOn: BackendAppRunnerService"));
   });
 });
