@@ -197,6 +197,64 @@
     ]
   },
   {
+    "productId": 9088,
+    "name": "Duplicate Guard Crop",
+    "cropType": "Fruits",
+    "harvestDate": "2026-10-10",
+    "farmLocation": "Salinas Valley, California",
+    "quantity": "1,000 kg",
+    "qualityGrade": "Grade A+ (Premium Export)",
+    "storageConditions": "Cold Chain Controlled (4°C, 85% RH)",
+    "certifications": [
+      "USDA Organic",
+      "GlobalG.A.P."
+    ],
+    "estimatedShelfLife": "45 Days",
+    "notes": "",
+    "farmer": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+    "status": "DispatchedToDistributor",
+    "qrBlockchainHash": "0xsim-dup-test-001",
+    "verificationStatus": "SIMULATED_DEMO",
+    "isSimulated": true,
+    "blockNumber": null,
+    "history": [
+      {
+        "action": "CREATED",
+        "actorAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+        "receiverAddress": null,
+        "date": "2026-10-10",
+        "txHash": "0xsim-dup-test-001",
+        "verificationStatus": "SIMULATED_DEMO",
+        "isSimulated": true,
+        "blockNumber": null,
+        "gasUsed": null,
+        "verifiedAt": null,
+        "location": "Origin Farm",
+        "notes": "Harvest registered and logged."
+      },
+      {
+        "action": "DISPATCHED_TO_DISTRIBUTOR",
+        "actorAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+        "receiverAddress": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+        "date": "2026-10-11",
+        "txHash": "0xsim-dup-dispatch-001",
+        "verificationStatus": "SIMULATED_DEMO",
+        "isSimulated": true,
+        "blockNumber": null,
+        "gasUsed": null,
+        "verifiedAt": null,
+        "location": null,
+        "notes": null,
+        "createdAt": "2026-10-10T12:53:18.557Z"
+      }
+    ],
+    "distributor": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+    "retailer": null,
+    "consumer": null,
+    "createdAt": "2026-10-10T12:53:18.531Z",
+    "updatedAt": "2026-10-10T12:53:18.567Z"
+  },
+  {
     "productId": 8801,
     "name": "Verified Gala Apples",
     "cropType": "Fruits",
@@ -245,7 +303,7 @@
         "verifiedAt": null,
         "location": null,
         "notes": null,
-        "createdAt": "2026-10-10T07:55:39.403Z"
+        "createdAt": "2026-10-10T12:53:18.705Z"
       },
       {
         "action": "RECEIVED_BY_DISTRIBUTOR",
@@ -260,7 +318,7 @@
         "verifiedAt": null,
         "location": null,
         "notes": null,
-        "createdAt": "2026-10-10T07:55:39.410Z"
+        "createdAt": "2026-10-10T12:53:18.718Z"
       },
       {
         "action": "DISPATCHED_TO_RETAILER",
@@ -275,7 +333,7 @@
         "verifiedAt": null,
         "location": null,
         "notes": null,
-        "createdAt": "2026-10-10T07:55:39.419Z"
+        "createdAt": "2026-10-10T12:53:18.729Z"
       },
       {
         "action": "RECEIVED_BY_RETAILER",
@@ -290,7 +348,7 @@
         "verifiedAt": null,
         "location": null,
         "notes": null,
-        "createdAt": "2026-10-10T07:55:39.425Z"
+        "createdAt": "2026-10-10T12:53:18.741Z"
       },
       {
         "action": "SOLD_TO_CONSUMER",
@@ -305,13 +363,71 @@
         "verifiedAt": null,
         "location": null,
         "notes": null,
-        "createdAt": "2026-10-10T07:55:39.433Z"
+        "createdAt": "2026-10-10T12:53:18.753Z"
       }
     ],
     "distributor": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
     "retailer": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4df",
     "consumer": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
-    "createdAt": "2026-10-10T07:55:39.378Z",
-    "updatedAt": "2026-10-10T07:55:39.434Z"
+    "createdAt": "2026-10-10T12:53:18.676Z",
+    "updatedAt": "2026-10-10T12:53:18.754Z"
+  },
+  {
+    "productId": 9077,
+    "name": "Concurrent Guard Batch",
+    "cropType": "Fruits",
+    "harvestDate": "2026-10-10",
+    "farmLocation": "Salinas Valley, California",
+    "quantity": "1,000 kg",
+    "qualityGrade": "Grade A+ (Premium Export)",
+    "storageConditions": "Cold Chain Controlled (4°C, 85% RH)",
+    "certifications": [
+      "USDA Organic",
+      "GlobalG.A.P."
+    ],
+    "estimatedShelfLife": "45 Days",
+    "notes": "",
+    "farmer": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+    "status": "DispatchedToDistributor",
+    "qrBlockchainHash": "0xsim-conc-create-001",
+    "verificationStatus": "SIMULATED_DEMO",
+    "isSimulated": true,
+    "blockNumber": null,
+    "history": [
+      {
+        "action": "CREATED",
+        "actorAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+        "receiverAddress": null,
+        "date": "2026-10-10",
+        "txHash": "0xsim-conc-create-001",
+        "verificationStatus": "SIMULATED_DEMO",
+        "isSimulated": true,
+        "blockNumber": null,
+        "gasUsed": null,
+        "verifiedAt": null,
+        "location": "Origin Farm",
+        "notes": "Harvest registered and logged."
+      },
+      {
+        "action": "DISPATCHED_TO_DISTRIBUTOR",
+        "actorAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+        "receiverAddress": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+        "date": "2026-10-11",
+        "txHash": "0xsim-conc-dispatch-A",
+        "verificationStatus": "SIMULATED_DEMO",
+        "isSimulated": true,
+        "blockNumber": null,
+        "gasUsed": null,
+        "verifiedAt": null,
+        "location": null,
+        "notes": null,
+        "createdAt": "2026-10-10T12:53:18.964Z"
+      }
+    ],
+    "distributor": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+    "retailer": null,
+    "consumer": null,
+    "createdAt": "2026-10-10T12:53:18.955Z",
+    "updatedAt": "2026-10-10T12:53:18.965Z"
   }
 ]

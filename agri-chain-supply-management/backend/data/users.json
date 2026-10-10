@@ -94,5 +94,25 @@
     ],
     "createdAt": "2026-10-10T07:55:37.914Z",
     "updatedAt": "2026-10-10T07:55:37.914Z"
+  },
+  {
+    "id": "user-tfarm_36797063-1791636797326",
+    "name": "Test Certified Farmer",
+    "username": "tfarm_36797063",
+    "email": "tfarm_36797063@agrifarm.test",
+    "password": "$2b$10$ZoAvw18XG9XhlRQ9C7PMR.NYydMH7YTbhDcWkUydSZPD7P03P2qmm",
+    "role": 1,
+    "roleName": "Farmer",
+    "organization": "Cascade Valley Organic Cooperative",
+    "location": "Wenatchee, WA",
+    "phone": "+1 509-555-9876",
+    "walletAddress": "0xc6cafdd06491154a95586dda9ea80be21318adc5",
+    "avatar": "👨‍🌾",
+    "badgeColor": "success",
+    "verifiedCertifications": [
+      "Self-Declared Stakeholder"
+    ],
+    "createdAt": "2026-10-10T12:53:17.326Z",
+    "updatedAt": "2026-10-10T12:53:17.326Z"
   }
 ]
