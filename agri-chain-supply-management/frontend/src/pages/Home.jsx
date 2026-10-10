@@ -32,6 +32,9 @@ export default function Home() {
                 <Link to="/trace" className="btn btn-outline-light btn-lg px-4 fw-semibold rounded-pill">
                   <i className="bi bi-search me-2"></i>Trace a Product Batch
                 </Link>
+                <Link to="/login" className="btn btn-outline-light btn-lg px-4 fw-semibold rounded-pill">
+                  <i className="bi bi-box-arrow-in-right me-2"></i>Portal Login
+                </Link>
                 <Link to="/cloud-architecture" className="btn btn-outline-light btn-lg px-4 fw-semibold rounded-pill">
                   <i className="bi bi-cloud-check me-2"></i>View AWS Architecture
                 </Link>

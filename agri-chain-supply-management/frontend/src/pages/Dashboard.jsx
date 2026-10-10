@@ -30,7 +30,11 @@ export default function Dashboard() {
       setProducts(productList || []);
       setStats(statsData);
     } catch (err) {
-      setError(err.response?.data?.message || err.message);
+      if (err.message === "Network Error" || !err.response) {
+        setError("Unable to connect to the backend API server on http://localhost:5000. Please ensure the backend service is running.");
+      } else {
+        setError(err.response?.data?.message || err.message);
+      }
     } finally {
       setLoading(false);
     }

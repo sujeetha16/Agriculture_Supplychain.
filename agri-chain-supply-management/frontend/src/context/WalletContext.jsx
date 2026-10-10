@@ -12,13 +12,15 @@ import { loginUser, registerUser } from "../services/api";
 const WalletContext = createContext(null);
 
 export function WalletProvider({ children }) {
-  // Authentication State
+  // Authentication State: null by default so user must log in
   const [currentUser, setCurrentUser] = useState(() => {
     try {
-      const saved = localStorage.getItem("agri_current_user");
-      return saved ? JSON.parse(saved) : STAKEHOLDERS[0]; // Default to Farmer
+      // Clear persistent user from localStorage so that launching localhost starts strictly on login
+      localStorage.removeItem("agri_current_user");
+      const saved = sessionStorage.getItem("agri_current_user");
+      return saved ? JSON.parse(saved) : null;
     } catch (_) {
-      return STAKEHOLDERS[0];
+      return null;
     }
   });
 
@@ -35,11 +37,12 @@ export function WalletProvider({ children }) {
   const [connecting, setConnecting] = useState(false);
   const [useMetaMaskSigner, setUseMetaMaskSigner] = useState(false);
 
-  // Synchronize user to localStorage
+  // Synchronize user to sessionStorage
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem("agri_current_user", JSON.stringify(currentUser));
+      sessionStorage.setItem("agri_current_user", JSON.stringify(currentUser));
     } else {
+      sessionStorage.removeItem("agri_current_user");
       localStorage.removeItem("agri_current_user");
     }
   }, [currentUser]);
@@ -174,6 +177,8 @@ export function WalletProvider({ children }) {
   // Logout function
   function logout() {
     try {
+      sessionStorage.removeItem("agri_token");
+      sessionStorage.removeItem("agri_current_user");
       localStorage.removeItem("agri_token");
       localStorage.removeItem("agri_current_user");
     } catch (_) {}

@@ -9,7 +9,7 @@ const api = axios.create({
 // Automatically inject JWT authentication header
 api.interceptors.request.use((config) => {
   try {
-    const token = localStorage.getItem("agri_token");
+    const token = sessionStorage.getItem("agri_token") || localStorage.getItem("agri_token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -20,6 +20,7 @@ api.interceptors.request.use((config) => {
 export async function loginUser(credentials) {
   const { data } = await api.post("/auth/login", credentials);
   if (data && data.token) {
+    sessionStorage.setItem("agri_token", data.token);
     localStorage.setItem("agri_token", data.token);
   }
   return data;
@@ -28,12 +29,15 @@ export async function loginUser(credentials) {
 export async function registerUser(userData) {
   const { data } = await api.post("/auth/register", userData);
   if (data && data.token) {
+    sessionStorage.setItem("agri_token", data.token);
     localStorage.setItem("agri_token", data.token);
   }
   return data;
 }
 
 export function logoutUser() {
+  sessionStorage.removeItem("agri_token");
+  sessionStorage.removeItem("agri_current_user");
   localStorage.removeItem("agri_token");
   localStorage.removeItem("agri_current_user");
 }

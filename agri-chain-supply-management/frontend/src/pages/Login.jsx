@@ -261,33 +261,49 @@ export default function Login() {
     <div className="container py-5">
       <div className="row justify-content-center">
         <div className="col-lg-10 col-xl-9">
-          {/* Header Banner */}
+          {/* Brand Header */}
           <div className="text-center mb-4">
-            <span className="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 mb-2">
-              <i className="bi bi-shield-lock-fill me-1"></i>Agricultural Supply Chain Access Control
-            </span>
-            <h2 className="fw-bold tracking-tight">Stakeholder Authentication & Access Portal</h2>
-            <p className="text-secondary small max-w-650 mx-auto">
-              Secure, validated access for Farmers, Cold-Chain Distributors, Supermarket Retailers, and Verified Consumers.
+            <div className="d-inline-flex align-items-center justify-content-center bg-success text-white rounded-circle shadow-sm mb-2" style={{ width: "54px", height: "54px", fontSize: "1.6rem" }}>
+              🌱
+            </div>
+            <h2 className="fw-bold tracking-tight mb-1">Trustable AgriChain</h2>
+            <p className="text-secondary small mb-3">
+              Stakeholder Authentication & Access Portal
             </p>
 
             {/* Navigation Tabs */}
-            <div className="d-inline-flex bg-light p-1 rounded-pill border mt-2">
+            <div className="d-inline-flex bg-light p-1 rounded-pill border">
               <button
                 type="button"
                 className={`btn btn-sm rounded-pill px-4 fw-semibold ${activeTab === "login" ? "btn-success shadow-sm" : "btn-light text-secondary"}`}
                 onClick={() => setActiveTab("login")}
               >
-                <i className="bi bi-box-arrow-in-right me-1"></i>Sign In to Portal
+                <i className="bi bi-box-arrow-in-right me-1"></i>Sign In
               </button>
               <button
                 type="button"
                 className={`btn btn-sm rounded-pill px-4 fw-semibold ${activeTab === "register" ? "btn-success shadow-sm" : "btn-light text-secondary"}`}
                 onClick={() => setActiveTab("register")}
               >
-                <i className="bi bi-person-plus-fill me-1"></i>Register New Stakeholder
+                <i className="bi bi-person-plus-fill me-1"></i>Register New Account
               </button>
             </div>
+
+            {user && (
+              <div className="alert alert-info d-flex align-items-center justify-content-between p-2 px-3 mt-3 mb-0 rounded-3 small text-start">
+                <div>
+                  <i className="bi bi-check-circle-fill text-success me-2"></i>
+                  Currently signed in as: <strong>{user.name}</strong> ({user.roleName})
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary fw-semibold px-3"
+                  onClick={() => navigate("/dashboard")}
+                >
+                  Go to Dashboard <i className="bi bi-arrow-right ms-1"></i>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ========================================================== */}

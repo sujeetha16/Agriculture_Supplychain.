@@ -19,6 +19,17 @@ export default function Layout({ children }) {
 
   const navigate = useNavigate();
 
+  // If user is not logged in: show ONLY the login screen without top persona strip or app navbar
+  if (!user) {
+    return (
+      <div className="d-flex flex-column min-vh-100 bg-light">
+        <main className="flex-grow-1 d-flex align-items-center justify-content-center py-4">
+          {children}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="d-flex flex-column min-vh-100">
       {/* Interactive Quick Portal Switcher Strip */}
@@ -145,6 +156,11 @@ export default function Layout({ children }) {
                       </li>
                     ))}
                     <li><hr className="dropdown-divider" /></li>
+                    <li>
+                      <Link className="dropdown-item small" to="/login">
+                        <i className="bi bi-shield-lock me-2 text-primary"></i>Login / Switch Credentials
+                      </Link>
+                    </li>
                     <li>
                       <button
                         className="dropdown-item small text-danger"

@@ -79,17 +79,30 @@ export default function CloudArchitecture() {
             <div className="col-md-3">
               <div className="p-3 bg-light rounded-3">
                 <div className="small text-muted">Active Database Layer</div>
-                <div className="fw-bold text-dark fs-5">
-                  {healthData?.database || "Detecting..."}
+                <div className="fw-bold text-dark fs-5 text-truncate" title={typeof healthData?.database === "object" ? healthData.database.engine : healthData?.database}>
+                  {typeof healthData?.database === "object"
+                    ? (healthData?.database?.engine || (healthData?.database?.connected ? "MongoDB Atlas" : "Local Sandbox Datastore"))
+                    : (healthData?.database || "Detecting...")}
                 </div>
+                {typeof healthData?.database === "object" && (
+                  <span className={`badge ${healthData.database.connected ? "bg-success-subtle text-success border border-success-subtle" : "bg-warning-subtle text-dark border border-warning-subtle"} mt-1 small`} style={{ fontSize: "0.72rem" }}>
+                    <i className={`bi ${healthData.database.connected ? "bi-check-circle-fill" : "bi-hdd-fill"} me-1`}></i>
+                    {healthData.database.connected ? "Cloud Cluster Live" : "Local Sandbox Store"}
+                  </span>
+                )}
               </div>
             </div>
             <div className="col-md-3">
               <div className="p-3 bg-light rounded-3">
-                <div className="small text-muted">Target Environment</div>
+                <div className="small text-muted">Target Environment & Memory</div>
                 <div className="fw-bold text-dark fs-5">
                   {healthData?.environment ? healthData.environment.toUpperCase() : "AWS CLOUD READY"}
                 </div>
+                {healthData?.system && (
+                  <div className="small text-muted mt-1" style={{ fontSize: "0.72rem" }}>
+                    RSS: {healthData.system.memoryUsageMB} MB • Node: {healthData.system.nodeVersion}
+                  </div>
+                )}
               </div>
             </div>
           </div>
