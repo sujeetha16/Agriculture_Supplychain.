@@ -5,7 +5,7 @@
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.24-363636.svg)](https://soliditylang.org/)
 [![Hardhat](https://img.shields.io/badge/Hardhat-2.22-yellow.svg)](https://hardhat.org/)
 [![AWS CloudFormation](https://img.shields.io/badge/AWS-CloudFormation-orange.svg)](https://aws.amazon.com/cloudformation/)
-[![Tests](https://img.shields.io/badge/Tests-24%20Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-39%20Passing-brightgreen.svg)]()
 
 A cloud-native agricultural provenance, cold-chain logistics, and traceability platform engineered for a **College Cloud Computing Course Capstone** and **Applied Systems Research Evaluation**. Combines containerized Express microservices on AWS App Runner, high-performance edge delivery via Amazon CloudFront (with Origin Access Control), resilient database persistence, and decentralized Ethereum Sepolia smart-contract verification.
 
@@ -19,13 +19,13 @@ To maintain rigorous academic and engineering honesty, this table documents the 
 | :--- | :--- | :--- |
 | **Frontend SPA** | **VERIFIED & BUILT** | React 18, Vite 5, Bootstrap 5. 279 modules build cleanly into `dist/`. |
 | **Backend REST API** | **VERIFIED & TESTED** | Express 4, correlation IDs (`x-request-id`), structured CloudWatch logs, health checks. |
-| **Authentication & Security** | **HARDENED & TESTED** | Passwords hashed with **bcrypt** (salt 10); 24h signed **JWTs**; brute-force **rate limiting**; role-based route guards. |
+| **Authentication & Security** | **HARDENED & TESTED** | Passwords hashed with **bcrypt**; strong production **JWT_SECRET** validation; SIWE **wallet challenge-response signature verification**; origin-restricted CORS allowlists. |
 | **Supply Chain State Machine**| **VERIFIED & TESTED** | Linear 5-state lifecycle (Created $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Sold) enforced on API and contract. |
 | **Smart Contract (`AgriChain.sol`)** | **AUDITED & TESTED** | Solidity 0.8.24; **12/12 automated Hardhat unit tests passing** (access control, role registry, negative security). |
-| **Blockchain Receipt Verifier** | **IMPLEMENTED & TESTED** | Backend JSON-RPC client audits `eth_getTransactionReceipt` via native fetch, explicitly tagging SIMULATED vs CONFIRMED. |
-| **AWS CloudFormation IaC** | **CONFIGURED & VALIDATED** | `aws/cloudformation-template.yaml` declares S3, CloudFront OAC, App Runner, IAM roles, and CloudWatch 5xx Alarms. |
+| **Blockchain Receipt Verifier** | **IMPLEMENTED & TESTED** | Strict ABI event log decoding with ethers v6: destination contract check, expected event match, product ID match, actor identity checks, and anti-replay guards. |
+| **AWS CloudFormation IaC** | **CONFIGURED & VALIDATED** | `aws/cloudformation-template.yaml` declares S3, CloudFront OAC, App Runner, IAM execution roles, SNS topics, and CloudWatch 5xx Alarms. |
 | **AWS Live Cloud Deployment** | **PREPARED (PENDING RUN)** | Template ready for deployment; no billable cloud resources created without user approval. |
-| **Empirical Load Harness** | **BENCHMARKED** | Zero-dependency high-concurrency runner (`load_test_native.js`): **452 req/sec, p50: 20ms, 0% error rate**. |
+| **Empirical Load Harness** | **BENCHMARKED (LOCAL)** | Zero-dependency local micro-benchmark (`load_test_native.js`): loopback API throughput, p50/p95 latency metrics, remote endpoint safety guards. |
 
 ---
 
@@ -33,24 +33,23 @@ To maintain rigorous academic and engineering honesty, this table documents the 
 
 ```
                                   [ Consumers, Farmers, Distributors, Retailers ]
-                                                         │
-                                                         ▼
-                                            [ Amazon CloudFront CDN ]
-                                          (Global Edge SSL, OAC, Caching)
-                                                         │
-                                         ┌───────────────┴───────────────┐
-                                         │ Route: /*                     │ Route: /api/*
-                                         ▼                               ▼
-                                [ Amazon S3 Bucket ]            [ AWS App Runner Service ]
-                              (Private Encrypted React SPA)     (Node.js 20 Express Container)
-                                                                         │
-                                         ┌───────────────────────────────┴───────────────────────────────┐
-                                         ▼                                                               ▼
-                              [ Persistence Tier ]                                            [ Consensus Ledger ]
-                     ┌───────────────────────────────────┐                           ┌───────────────────────────────────┐
-                     │   MongoDB Atlas / AWS DocumentDB  │                           │   Ethereum Sepolia Smart Contract │
-                     │   (External TLS Managed Cluster)  │                           │   (0xB601FDccec475b61B8Bc9f3661eC)│
-                     └───────────────────────────────────┘                           └───────────────────────────────────┘
+                                             │                         │
+                        1. Web App (HTTPS)   │                         │ 2. Direct API Calls (HTTPS /api/*)
+                                             ▼                         ▼
+                                 [ Amazon CloudFront CDN ]    [ AWS App Runner Service ]
+                               (Global Edge SSL, OAC via S3)  (Node.js 20 Express Container)
+                                             │                         │
+                                             ▼                         │ (Origin-Restricted CORS)
+                                   [ Amazon S3 Bucket ]                │
+                              (Private Encrypted React SPA)            │
+                                                                       │
+                                       ┌───────────────────────────────┴───────────────────────────────┐
+                                       ▼                                                               ▼
+                            [ Persistence Tier ]                                            [ Consensus Ledger ]
+                   ┌───────────────────────────────────┐                           ┌───────────────────────────────────┐
+                   │   MongoDB Atlas / AWS DocumentDB  │                           │   Ethereum Sepolia Smart Contract │
+                   │   (External TLS Managed Cluster)  │                           │   (0xB601FDccec475b61B8Bc9f3661eC)│
+                   └───────────────────────────────────┘                           └───────────────────────────────────┘
 ```
 
 ### Architectural Pillars:
@@ -120,16 +119,18 @@ npx hardhat test
 ```
 *Tests role registration, product creation, sequential Farmer $\rightarrow$ Distributor $\rightarrow$ Retailer $\rightarrow$ Consumer transitions, and negative access control attacks.*
 
-### Run Backend API & Security Suite (12 Tests)
+### Run Backend API & Security Suite (27 Tests)
 ```bash
 cd agri-chain-supply-management/backend
 npm test
 ```
-*Tests `/api/health`, registration validation, password hashing, JWT authentication, role enforcement, duplicate prevention, and cryptographic receipt verification.*
+*Executes all 27 automated tests across two comprehensive suites:*
+* *`auth_and_lifecycle.test.js` (12 tests): `/api/health`, registration validation, password hashing, JWT authentication, role enforcement, duplicate prevention, and lifecycle state transitions.*
+* *`blockchain_verification.test.js` (15 tests): Contract address validation, event log ABI decoding, product ID matching, stakeholder identity verification, reverted tx blocking, pending tx handling, unverified state blocking DB, duplicate tx prevention, and SIWE wallet challenge verification.*
 
 ### Run Empirical Performance Load Test
 ```bash
-# Benchmark local or cloud API with 10 virtual users across 100 requests
+# Benchmark local API with 10 virtual users across 100 requests (Local loopback smoke test)
 node experiments/load_test_native.js --url http://localhost:5000 --users 10 --requests 100
 ```
 

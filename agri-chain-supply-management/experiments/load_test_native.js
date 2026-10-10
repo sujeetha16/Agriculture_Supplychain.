@@ -1,5 +1,7 @@
 // Path: experiments/load_test_native.js
 // High-concurrency zero-dependency benchmark harness for Agriculture Supply Chain API
+// IMPORTANT: This micro-benchmark measures local off-chain HTTP API endpoint response latency.
+// It does NOT measure distributed AWS Cloud infrastructure performance or Ethereum consensus throughput.
 
 const fs = require("fs");
 const path = require("path");
@@ -11,7 +13,8 @@ function parseArgs() {
     endpoint: "/api/products",
     users: 25,
     requests: 250,
-    output: path.join(__dirname, "latest_benchmark_results.json")
+    output: path.join(__dirname, "latest_benchmark_results.json"),
+    confirmRemote: false
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -20,6 +23,7 @@ function parseArgs() {
     if (args[i] === "--users" && args[i + 1]) config.users = parseInt(args[++i], 10);
     if (args[i] === "--requests" && args[i + 1]) config.requests = parseInt(args[++i], 10);
     if (args[i] === "--output" && args[i + 1]) config.output = args[++i];
+    if (args[i] === "--confirm-remote") config.confirmRemote = true;
   }
   return config;
 }
@@ -34,13 +38,29 @@ async function runBenchmark() {
   const config = parseArgs();
   const targetUrl = `${config.url.replace(/\/$/, "")}${config.endpoint}`;
 
+  // Safety check: require explicit confirmation before targeting non-local URLs
+  const isLocal =
+    targetUrl.includes("localhost") ||
+    targetUrl.includes("127.0.0.1") ||
+    targetUrl.includes("::1");
+
+  if (!isLocal && !config.confirmRemote) {
+    console.error("SAFETY ERROR: Target URL is not localhost / 127.0.0.1.");
+    console.error("To execute load testing against a remote cloud staging endpoint, pass --confirm-remote.");
+    console.error("Example: node experiments/load_test_native.js --url https://api.example.com --confirm-remote");
+    process.exit(1);
+  }
+
   console.log("=================================================================");
   console.log("  AGRICULTURE SUPPLY CHAIN API PERFORMANCE EXPERIMENT HARNESS");
   console.log("=================================================================");
   console.log(`Target URL:            ${targetUrl}`);
+  console.log(`Target Scope:          ${isLocal ? "Local Loopback (Development / Sandbox)" : "Remote / Cloud Endpoint"}`);
   console.log(`Concurrent VUs:        ${config.users}`);
   console.log(`Total Requests:        ${config.requests}`);
   console.log(`Timestamp:             ${new Date().toISOString()}`);
+  console.log("Note:                  Measures local HTTP handler throughput only.");
+  console.log("                       Does NOT execute blockchain transactions.");
   console.log("-----------------------------------------------------------------");
   console.log("Warming up connections...");
 
@@ -99,8 +119,11 @@ async function runBenchmark() {
   latencies.sort((a, b) => a - b);
 
   const summary = {
-    testParameters: {
+    testMetadata: {
+      benchmarkCategory: "Off-Chain Localhost HTTP API Smoke / Load Test",
+      disclaimer: "Measures local process HTTP throughput and loopback latency. Does not represent AWS cloud or Ethereum blockchain consensus performance.",
       targetUrl,
+      isLocalhost: isLocal,
       concurrencyVUs: config.users,
       totalRequests: config.requests,
       timestamp: new Date().toISOString()
@@ -141,4 +164,8 @@ async function runBenchmark() {
   console.log("=================================================================");
 }
 
-runBenchmark();
+if (require.main === module) {
+  runBenchmark();
+}
+
+module.exports = { runBenchmark, percentile, parseArgs };

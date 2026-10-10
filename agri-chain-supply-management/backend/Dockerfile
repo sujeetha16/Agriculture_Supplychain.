@@ -20,6 +20,7 @@ COPY middleware/ ./middleware/
 COPY models/ ./models/
 COPY routes/ ./routes/
 COPY services/ ./services/
+COPY contracts/ ./contracts/
 COPY data/ ./data/
 
 # Secure execution as non-root user

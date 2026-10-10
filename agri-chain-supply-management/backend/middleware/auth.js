@@ -1,8 +1,22 @@
 // Path: backend/middleware/auth.js
 const jwt = require("jsonwebtoken");
 
-const JWT_SECRET = process.env.JWT_SECRET || "agri-chain-production-jwt-secret-key-change-in-env-2026";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+function resolveJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (IS_PRODUCTION) {
+    if (!secret || secret.trim().length < 32 || secret.includes("change-in-env") || secret.includes("MustBeReplaced")) {
+      throw new Error(
+        "FATAL SECURITY CONFIGURATION: In production (NODE_ENV=production), JWT_SECRET must be explicitly configured with at least 32 characters of high-entropy cryptographic material."
+      );
+    }
+    return secret.trim();
+  }
+  return secret || "agri-chain-dev-insecure-secret-for-local-development-only-2026";
+}
+
+const JWT_SECRET = resolveJwtSecret();
 
 /**
  * Validates JWT Bearer token and sets req.user

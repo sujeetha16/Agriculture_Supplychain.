@@ -1,5 +1,9 @@
 // Path: backend/services/blockchainVerifier.js
-// Standard Ethereum JSON-RPC 2.0 client via native fetch (Zero-dependency, high performance)
+// Standard Ethereum JSON-RPC 2.0 client with ABI event decoding via ethers
+
+const fs = require("fs");
+const path = require("path");
+const { ethers } = require("ethers");
 
 const SEPOLIA_RPC_URLS = [
   process.env.SEPOLIA_RPC_URL,
@@ -8,11 +12,91 @@ const SEPOLIA_RPC_URLS = [
   "https://gateway.tenderly.co/public/sepolia"
 ].filter(Boolean);
 
+// Locate AgriChain artifact ABI safely across environments
+function loadArtifact() {
+  const candidatePaths = [
+    path.join(__dirname, "../contracts/AgriChain.json"),
+    path.join(__dirname, "../../frontend/src/contracts/AgriChain.json"),
+    path.join(__dirname, "../../blockchain/artifacts/contracts/AgriChain.sol/AgriChain.json")
+  ];
+
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      try {
+        const raw = fs.readFileSync(p, "utf-8");
+        return JSON.parse(raw);
+      } catch (_) {}
+    }
+  }
+  return { abi: [], address: "0xB601FDccec475b61B8Bc9f3661eC4F73B7499a2D" };
+}
+
+const artifact = loadArtifact();
+const contractInterface = new ethers.Interface(artifact.abi || []);
+
 const CONFIGURED_CONTRACT_ADDRESS = (
   process.env.CONTRACT_ADDRESS ||
   process.env.VITE_CONTRACT_ADDRESS ||
+  artifact.address ||
   "0xB601FDccec475b61B8Bc9f3661eC4F73B7499a2D"
 ).toLowerCase();
+
+/**
+ * Mapping of Supply-Chain Lifecycle actions to exact AgriChain Solidity event signatures & roles
+ */
+const ACTION_EVENT_MAP = {
+  CREATED: {
+    eventName: "ProductCreated",
+    actorField: "farmer",
+    hasReceiver: false
+  },
+  DISPATCHED_TO_DISTRIBUTOR: {
+    eventName: "ProductDispatchedToDistributor",
+    actorField: "farmer",
+    receiverField: "distributor",
+    hasReceiver: true
+  },
+  RECEIVED_BY_DISTRIBUTOR: {
+    eventName: "ProductReceivedByDistributor",
+    actorField: "distributor",
+    hasReceiver: false
+  },
+  DISPATCHED_TO_RETAILER: {
+    eventName: "ProductDispatchedToRetailer",
+    actorField: "distributor",
+    receiverField: "retailer",
+    hasReceiver: true
+  },
+  RECEIVED_BY_RETAILER: {
+    eventName: "ProductReceivedByRetailer",
+    actorField: "retailer",
+    hasReceiver: false
+  },
+  SOLD_TO_CONSUMER: {
+    eventName: "ProductSoldToConsumer",
+    actorField: "retailer",
+    receiverField: "consumer",
+    hasReceiver: true
+  }
+};
+
+function normalizeActionKey(action) {
+  if (!action || typeof action !== "string") return null;
+  const upper = action.toUpperCase();
+  if (ACTION_EVENT_MAP[upper]) return upper;
+
+  // Map CamelCase variants
+  const camelMap = {
+    CREATED: "CREATED",
+    DISPATCHEDTODISTRIBUTOR: "DISPATCHED_TO_DISTRIBUTOR",
+    RECEIVEDBYDISTRIBUTOR: "RECEIVED_BY_DISTRIBUTOR",
+    DISPATCHEDTORETAILER: "DISPATCHED_TO_RETAILER",
+    RECEIVEDBYRETAILER: "RECEIVED_BY_RETAILER",
+    SOLDTOCONSUMER: "SOLD_TO_CONSUMER"
+  };
+  const key = upper.replace(/_/g, "");
+  return camelMap[key] || null;
+}
 
 /**
  * Queries an Ethereum JSON-RPC endpoint with timeout and failover
@@ -43,30 +127,53 @@ async function rpcCall(method, params = [], timeoutMs = 3500) {
   throw new Error("All Ethereum Sepolia RPC endpoints failed or timed out.");
 }
 
+function parseBlockNumber(bn) {
+  if (bn === null || bn === undefined) return null;
+  if (typeof bn === "number") return bn;
+  if (typeof bn === "string" && bn.startsWith("0x")) return parseInt(bn, 16);
+  return Number(bn) || null;
+}
+
+function parseGas(gas) {
+  if (gas === null || gas === undefined) return null;
+  if (typeof gas === "string" && gas.startsWith("0x")) return parseInt(gas, 16).toString();
+  return gas.toString();
+}
+
 /**
  * Verifies an Ethereum Sepolia transaction hash cryptographically.
- * Distinguishes SIMULATED_DEMO, PENDING, REVERTED, and VERIFIED_ON_CHAIN.
+ * Performs end-to-end receipt validation, destination contract checking,
+ * ABI event decoding, product ID verification, and stakeholder identity validation.
  *
  * @param {string} txHash - 64-hex string or simulated hash prefix
- * @param {Object} options - { isDemoMode, productId, expectedAction }
- * @returns {Promise<Object>} Verification outcome with verifiable proof metrics
+ * @param {Object} options - { isDemoMode, productId, expectedAction, expectedActor, expectedReceiver, receipt, contractAddress }
+ * @returns {Promise<Object>} Granular verification outcome with cryptographic proof metrics
  */
 async function verifyTransaction(txHash, options = {}) {
   if (!txHash || typeof txHash !== "string") {
     return {
-      status: "UNVERIFIED",
+      status: "INVALID_HASH_FORMAT",
       verified: false,
       isSimulated: false,
       message: "No transaction hash provided."
     };
   }
 
-  // Detect explicit simulated demo hashes
-  if (
-    txHash.startsWith("0xsim-") ||
-    txHash.startsWith("sim-") ||
-    (process.env.NODE_ENV !== "production" && options.isDemoMode)
-  ) {
+  const isSimulatedPrefix = txHash.startsWith("0xsim-") || txHash.startsWith("sim-");
+  const isDemoRequested = Boolean(options.isDemoMode);
+  const isProduction = process.env.NODE_ENV === "production";
+
+  // Prevent simulated demo transactions from masquerading in production
+  if (isSimulatedPrefix || isDemoRequested) {
+    if (isProduction) {
+      return {
+        status: "DEMO_PROHIBITED_IN_PRODUCTION",
+        verified: false,
+        isSimulated: true,
+        txHash,
+        message: "Simulated demonstration transactions are strictly prohibited in production environment."
+      };
+    }
     return {
       status: "SIMULATED_DEMO",
       verified: false,
@@ -76,7 +183,7 @@ async function verifyTransaction(txHash, options = {}) {
     };
   }
 
-  // Strict regex check for real EVM transaction hash
+  // Strict regex check for real EVM transaction hash (32 bytes hex)
   if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
     return {
       status: "INVALID_HASH_FORMAT",
@@ -88,7 +195,10 @@ async function verifyTransaction(txHash, options = {}) {
   }
 
   try {
-    const receipt = await rpcCall("eth_getTransactionReceipt", [txHash], 3000);
+    // Allow receipt injection for deterministic regression testing
+    const receipt = options.receipt !== undefined
+      ? options.receipt
+      : await rpcCall("eth_getTransactionReceipt", [txHash], options.timeoutMs || 3000);
 
     if (!receipt) {
       return {
@@ -100,8 +210,9 @@ async function verifyTransaction(txHash, options = {}) {
       };
     }
 
+    // 1. Transaction execution status check
     const statusHex = receipt.status;
-    const isSuccess = statusHex === "0x1" || statusHex === 1;
+    const isSuccess = statusHex === "0x1" || statusHex === 1 || statusHex === true;
 
     if (!isSuccess) {
       return {
@@ -109,27 +220,185 @@ async function verifyTransaction(txHash, options = {}) {
         verified: false,
         isSimulated: false,
         txHash,
-        blockNumber: parseInt(receipt.blockNumber, 16) || null,
+        blockNumber: parseBlockNumber(receipt.blockNumber),
         message: "Transaction was mined on Sepolia but execution reverted on-chain."
       };
     }
 
+    // 2. Destination contract address check (case-insensitive)
     const receiptTo = (receipt.to || "").toLowerCase();
-    const contractMatch =
-      CONFIGURED_CONTRACT_ADDRESS === "paste_deployed_contract_address" ||
-      !receiptTo ||
-      receiptTo === CONFIGURED_CONTRACT_ADDRESS;
+    const expectedContract = (options.contractAddress || CONFIGURED_CONTRACT_ADDRESS).toLowerCase();
 
+    if (!receiptTo || receiptTo !== expectedContract) {
+      return {
+        status: "CONTRACT_MISMATCH",
+        verified: false,
+        isSimulated: false,
+        txHash,
+        blockNumber: parseBlockNumber(receipt.blockNumber),
+        destinationAddress: receipt.to || null,
+        expectedContractAddress: expectedContract,
+        message: `Transaction destination contract (${receipt.to || "none"}) does not match configured AgriChain contract (${expectedContract}).`
+      };
+    }
+
+    // 3. Inspect logs emitted by the exact AgriChain contract
+    const allLogs = Array.isArray(receipt.logs) ? receipt.logs : [];
+    const contractLogs = allLogs.filter(
+      (log) => (log.address || "").toLowerCase() === expectedContract
+    );
+
+    if (contractLogs.length === 0) {
+      return {
+        status: "EXPECTED_EVENT_MISSING",
+        verified: false,
+        isSimulated: false,
+        txHash,
+        blockNumber: parseBlockNumber(receipt.blockNumber),
+        message: `No event logs found in transaction receipt matching AgriChain contract (${expectedContract}).`
+      };
+    }
+
+    // 4. Resolve action requirements
+    const actionKey = normalizeActionKey(options.expectedAction);
+    const actionConfig = actionKey ? ACTION_EVENT_MAP[actionKey] : null;
+
+    let matchedParsedLog = null;
+    let anyAgriChainEventFound = null;
+
+    for (const log of contractLogs) {
+      try {
+        const parsed = contractInterface.parseLog({
+          topics: log.topics,
+          data: log.data
+        });
+        if (parsed) {
+          anyAgriChainEventFound = parsed;
+          if (actionConfig) {
+            if (parsed.name === actionConfig.eventName) {
+              matchedParsedLog = parsed;
+              break;
+            }
+          } else {
+            matchedParsedLog = parsed;
+            break;
+          }
+        }
+      } catch (_) {
+        // Log was not decodable by AgriChain ABI; check next log
+      }
+    }
+
+    // 5. Verify expected event presence & action correspondence
+    if (actionConfig && !matchedParsedLog) {
+      if (anyAgriChainEventFound) {
+        return {
+          status: "ACTION_MISMATCH",
+          verified: false,
+          isSimulated: false,
+          txHash,
+          blockNumber: parseBlockNumber(receipt.blockNumber),
+          expectedAction: options.expectedAction,
+          expectedEvent: actionConfig.eventName,
+          foundEvent: anyAgriChainEventFound.name,
+          message: `Transaction emitted '${anyAgriChainEventFound.name}' instead of expected lifecycle event '${actionConfig.eventName}'.`
+        };
+      }
+      return {
+        status: "EXPECTED_EVENT_MISSING",
+        verified: false,
+        isSimulated: false,
+        txHash,
+        blockNumber: parseBlockNumber(receipt.blockNumber),
+        expectedEvent: actionConfig.eventName,
+        message: `Expected event '${actionConfig.eventName}' was not emitted in transaction receipt.`
+      };
+    }
+
+    if (!matchedParsedLog) {
+      return {
+        status: "EXPECTED_EVENT_MISSING",
+        verified: false,
+        isSimulated: false,
+        txHash,
+        blockNumber: parseBlockNumber(receipt.blockNumber),
+        message: "No recognized AgriChain event found in transaction receipt logs."
+      };
+    }
+
+    // 6. Verify Product ID match
+    const eventProductId = matchedParsedLog.args.productId !== undefined
+      ? matchedParsedLog.args.productId.toString()
+      : null;
+
+    if (options.productId !== undefined && options.productId !== null) {
+      const expectedProductIdStr = String(options.productId);
+      if (eventProductId !== expectedProductIdStr) {
+        return {
+          status: "PRODUCT_ID_MISMATCH",
+          verified: false,
+          isSimulated: false,
+          txHash,
+          blockNumber: parseBlockNumber(receipt.blockNumber),
+          eventProductId,
+          expectedProductId: expectedProductIdStr,
+          message: `On-chain event product ID (${eventProductId}) does not match expected product ID (${expectedProductIdStr}).`
+        };
+      }
+    }
+
+    // 7. Verify Actor / Signer identity against on-chain indexed parameters
+    const expectedActor = (options.expectedActor || options.actorAddress || options.farmer);
+    if (expectedActor && actionConfig && actionConfig.actorField) {
+      const onChainActor = matchedParsedLog.args[actionConfig.actorField];
+      if (onChainActor && onChainActor.toLowerCase() !== expectedActor.toLowerCase()) {
+        return {
+          status: "ACTOR_MISMATCH",
+          verified: false,
+          isSimulated: false,
+          txHash,
+          blockNumber: parseBlockNumber(receipt.blockNumber),
+          onChainActor: onChainActor.toLowerCase(),
+          expectedActor: expectedActor.toLowerCase(),
+          field: actionConfig.actorField,
+          message: `On-chain event actor (${onChainActor.toLowerCase()}) does not match expected actor (${expectedActor.toLowerCase()}).`
+        };
+      }
+    }
+
+    // 8. Verify Receiver identity against on-chain indexed parameters (if applicable)
+    const expectedReceiver = (options.expectedReceiver || options.receiverAddress);
+    if (expectedReceiver && actionConfig && actionConfig.hasReceiver && actionConfig.receiverField) {
+      const onChainReceiver = matchedParsedLog.args[actionConfig.receiverField];
+      if (onChainReceiver && onChainReceiver.toLowerCase() !== expectedReceiver.toLowerCase()) {
+        return {
+          status: "ACTOR_MISMATCH",
+          verified: false,
+          isSimulated: false,
+          txHash,
+          blockNumber: parseBlockNumber(receipt.blockNumber),
+          onChainReceiver: onChainReceiver.toLowerCase(),
+          expectedReceiver: expectedReceiver.toLowerCase(),
+          field: actionConfig.receiverField,
+          message: `On-chain event recipient (${onChainReceiver.toLowerCase()}) does not match expected recipient (${expectedReceiver.toLowerCase()}).`
+        };
+      }
+    }
+
+    // All required checks passed!
     return {
       status: "VERIFIED_ON_CHAIN",
       verified: true,
       isSimulated: false,
       txHash,
-      blockNumber: parseInt(receipt.blockNumber, 16) || null,
-      gasUsed: parseInt(receipt.gasUsed, 16).toString(),
+      blockNumber: parseBlockNumber(receipt.blockNumber),
+      gasUsed: parseGas(receipt.gasUsed),
       from: receipt.from,
       to: receipt.to,
-      contractVerified: contractMatch,
+      contractVerified: true,
+      contractAddress: expectedContract,
+      event: matchedParsedLog.name,
+      productId: eventProductId ? Number(eventProductId) : null,
       message: "Cryptographically verified on Ethereum Sepolia ledger."
     };
   } catch (err) {
@@ -146,6 +415,10 @@ async function verifyTransaction(txHash, options = {}) {
 
 module.exports = {
   verifyTransaction,
+  rpcCall,
   CONFIGURED_CONTRACT_ADDRESS,
-  SEPOLIA_RPC_URLS
+  SEPOLIA_RPC_URLS,
+  ACTION_EVENT_MAP,
+  normalizeActionKey,
+  contractInterface
 };

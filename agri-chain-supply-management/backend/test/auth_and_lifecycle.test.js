@@ -8,9 +8,13 @@ let server;
 let baseUrl;
 
 const { connectDB } = require("../config/db");
+const Product = require("../models/Product");
 
 before(async () => {
   await connectDB();
+  if (typeof Product.resetToDefault === "function") {
+    await Product.resetToDefault();
+  }
   // Bind to ephemeral port for testing
   server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, resolve));

@@ -30,7 +30,13 @@ const historySchema = new mongoose.Schema({
       "PENDING_OR_NOT_FOUND",
       "RPC_UNAVAILABLE",
       "TRANSACTION_REVERTED",
+      "CONTRACT_MISMATCH",
+      "EXPECTED_EVENT_MISSING",
+      "PRODUCT_ID_MISMATCH",
+      "ACTION_MISMATCH",
+      "ACTOR_MISMATCH",
       "INVALID_HASH_FORMAT",
+      "DEMO_PROHIBITED_IN_PRODUCTION",
       "UNVERIFIED"
     ],
     default: "UNVERIFIED"
@@ -93,7 +99,13 @@ const productSchema = new mongoose.Schema({
       "PENDING_OR_NOT_FOUND",
       "RPC_UNAVAILABLE",
       "TRANSACTION_REVERTED",
+      "CONTRACT_MISMATCH",
+      "EXPECTED_EVENT_MISSING",
+      "PRODUCT_ID_MISMATCH",
+      "ACTION_MISMATCH",
+      "ACTOR_MISMATCH",
       "INVALID_HASH_FORMAT",
+      "DEMO_PROHIBITED_IN_PRODUCTION",
       "UNVERIFIED"
     ],
     default: "UNVERIFIED"

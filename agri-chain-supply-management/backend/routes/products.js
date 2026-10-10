@@ -7,6 +7,66 @@ const { verifyTransaction } = require("../services/blockchainVerifier");
 
 const router = express.Router();
 
+function getVerificationFailureResponse(verification) {
+  switch (verification.status) {
+    case "RPC_UNAVAILABLE":
+      return {
+        status: 503,
+        message: "Sepolia RPC endpoint is temporarily unavailable. Product lifecycle update blocked until on-chain verification can complete."
+      };
+    case "PENDING_OR_NOT_FOUND":
+      return {
+        status: 422,
+        message: "Transaction receipt not yet confirmed on Ethereum Sepolia ledger. Batch state cannot advance while pending."
+      };
+    case "TRANSACTION_REVERTED":
+      return {
+        status: 422,
+        message: "Transaction execution reverted on-chain. State transition rejected."
+      };
+    case "CONTRACT_MISMATCH":
+      return {
+        status: 422,
+        message: "Transaction was not submitted to the authorized AgriChain smart contract."
+      };
+    case "PRODUCT_ID_MISMATCH":
+      return {
+        status: 422,
+        message: "On-chain transaction event product ID does not match this agricultural batch ID."
+      };
+    case "EXPECTED_EVENT_MISSING":
+      return {
+        status: 422,
+        message: "Transaction receipt does not contain the expected lifecycle event from AgriChain contract."
+      };
+    case "ACTION_MISMATCH":
+      return {
+        status: 422,
+        message: "On-chain transaction event does not correspond to the requested supply-chain action."
+      };
+    case "ACTOR_MISMATCH":
+      return {
+        status: 422,
+        message: "On-chain transaction stakeholder address does not match the authenticated actor."
+      };
+    case "DEMO_PROHIBITED_IN_PRODUCTION":
+      return {
+        status: 403,
+        message: "Simulated demonstration transactions are strictly prohibited in production."
+      };
+    case "INVALID_HASH_FORMAT":
+      return {
+        status: 400,
+        message: "Invalid transaction hash format."
+      };
+    default:
+      return {
+        status: 422,
+        message: "Cryptographic blockchain verification failed."
+      };
+  }
+}
+
 const validate = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -153,6 +213,8 @@ router.get("/:productId/verify", [
   // Audit product creation hash
   const creationVerification = await verifyTransaction(product.qrBlockchainHash, {
     productId: product.productId,
+    expectedAction: "CREATED",
+    expectedActor: product.farmer,
     isDemoMode: product.isSimulated
   });
 
@@ -163,12 +225,15 @@ router.get("/:productId/verify", [
       const v = await verifyTransaction(h.txHash, {
         productId: product.productId,
         expectedAction: h.action,
+        expectedActor: h.actorAddress,
+        expectedReceiver: h.receiverAddress,
         isDemoMode: h.isSimulated
       });
       historyVerifications.push({
         action: h.action,
         txHash: h.txHash,
         actorAddress: h.actorAddress,
+        receiverAddress: h.receiverAddress,
         verification: v
       });
     }
@@ -237,11 +302,24 @@ router.post("/", [
   const normalizedFarmer = farmer.toLowerCase();
 
   // Cryptographic receipt check
+  const isDemo = Boolean(isDemoMode || req.user.isDemo);
   const verification = await verifyTransaction(txHash, {
-    isDemoMode: Boolean(isDemoMode || req.user.isDemo),
-    productId,
-    expectedAction: "CREATED"
+    isDemoMode: isDemo,
+    productId: Number(productId),
+    expectedAction: "CREATED",
+    expectedActor: normalizedFarmer
   });
+
+  // Guard: strictly block unverified actions from creating database records
+  if (!verification.verified && verification.status !== "SIMULATED_DEMO") {
+    const failure = getVerificationFailureResponse(verification);
+    return res.status(failure.status).json({
+      success: false,
+      status: verification.status,
+      message: failure.message,
+      verification
+    });
+  }
 
   const product = await Product.create({
     productId: Number(productId),
@@ -339,12 +417,36 @@ async function updateProductAction(req, res, action) {
     });
   }
 
+  // Duplicate transaction submission check
+  const isDuplicateTx =
+    (Array.isArray(product.history) && product.history.some((h) => h.txHash === txHash)) ||
+    product.qrBlockchainHash === txHash;
+  if (isDuplicateTx) {
+    return res.status(409).json({
+      success: false,
+      message: `Transaction hash ${txHash} has already been processed for this product batch. Duplicate transitions are rejected.`
+    });
+  }
+
   // 4. Cryptographic receipt verification
   const verification = await verifyTransaction(txHash, {
     isDemoMode: Boolean(isDemoMode || req.user?.isDemo),
-    productId,
-    expectedAction: action
+    productId: Number(productId),
+    expectedAction: action,
+    expectedActor: normalizedActor,
+    expectedReceiver: normalizedReceiver
   });
+
+  // Guard: strictly block unverified actions from advancing state
+  if (!verification.verified && verification.status !== "SIMULATED_DEMO") {
+    const failure = getVerificationFailureResponse(verification);
+    return res.status(failure.status).json({
+      success: false,
+      status: verification.status,
+      message: failure.message,
+      verification
+    });
+  }
 
   // 5. Update custody & state
   if (action === "DISPATCHED_TO_DISTRIBUTOR") product.distributor = normalizedReceiver;

@@ -43,21 +43,49 @@ app.use((req, res, next) => {
 });
 
 // --- Origin-Restricted CORS Configuration ---
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || "http://localhost:5173,http://localhost:8080,http://localhost:3000")
+const isProduction = process.env.NODE_ENV === "production";
+const defaultDevOrigins = [
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "http://localhost:3000",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:8080"
+];
+
+const configuredOrigins = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || "")
   .split(",")
-  .map((s) => s.trim().replace(/\/$/, ""));
+  .map((s) => s.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
+const allowedOrigins = configuredOrigins.length > 0
+  ? configuredOrigins
+  : isProduction
+    ? []
+    : defaultDevOrigins;
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow non-browser requests (e.g. curl, cloud health checks, Lambda)
+    // Allow non-browser requests (e.g. AWS App Runner health check, ALB, server-to-server)
     if (!origin) return callback(null, true);
-    if (process.env.NODE_ENV !== "production") return callback(null, true);
 
-    const isAllowed = allowedOrigins.some((allowed) => allowed === origin || allowed === "*");
-    if (isAllowed) {
+    // Development fallback
+    if (!isProduction) {
+      if (
+        defaultDevOrigins.includes(origin) ||
+        allowedOrigins.includes(origin) ||
+        origin.startsWith("http://localhost:") ||
+        origin.startsWith("http://127.0.0.1:")
+      ) {
+        return callback(null, true);
+      }
+    }
+
+    // Strict production check: exact match against explicit allowlist (no wildcards)
+    if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    return callback(new Error(`CORS Policy: Origin ${origin} is not allowed.`));
+
+    return callback(new Error(`CORS Policy: Origin '${origin}' is not authorized by ALLOWED_ORIGINS allowlist.`));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],

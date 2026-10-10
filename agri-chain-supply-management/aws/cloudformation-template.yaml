@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Agriculture Supply Chain Platform - Production Cloud Infrastructure
-  Provisions Amazon S3 (Static Web App), Amazon CloudFront (Edge CDN with OAC),
-  AWS App Runner (Containerized API), Amazon CloudWatch (Observability & Alarms),
-  and AWS IAM Least-Privilege Roles for University Capstone and Research Evaluation.
+  Provisions Amazon S3 (Private Static Web App Bucket), Amazon CloudFront (Edge CDN with OAC),
+  AWS App Runner (Containerized API with CORS allowlist), Amazon CloudWatch (Observability & Alarms),
+  Amazon SNS (Operational Alerting), and AWS IAM Least-Privilege Execution Roles.
 
 Parameters:
   ProjectName:
@@ -17,19 +17,40 @@ Parameters:
     Description: Target deployment tier
   BackendImageIdentifier:
     Type: String
-    Default: public.ecr.aws/aws-containers/hello-app-runner:latest
     Description: >
-      ECR image URI for the containerized Express API (e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/agri-chain-backend:latest).
+      Required ECR image URI for the containerized Express API
+      (e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/agri-chain-backend:latest).
+      Do NOT use sample hello-app-runner images in production.
+    AllowedPattern: '^(\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com\/|public\.ecr\.aws\/).+$'
+    ConstraintDescription: Must be a valid Amazon ECR or Public ECR image URI.
   JwtSecretParameter:
     Type: String
     NoEcho: true
-    Default: AgriChain-Production-Secret-Key-MustBeReplacedInAWS-2026
-    Description: Cryptographic secret key for signing JWT authentication tokens
+    MinLength: 32
+    MaxLength: 256
+    Description: >
+      Cryptographic secret key for signing JWT authentication tokens (minimum 32 characters).
+      Must be provided securely at stack creation or injected via AWS Secrets Manager.
   DatabaseConnectionString:
     Type: String
     NoEcho: true
-    Default: mongodb+srv://dbuser:REPLACE_WITH_MANAGED_PASS@cluster0.mongodb.net/agri_chain?retryWrites=true&w=majority
-    Description: Managed TLS MongoDB Atlas or AWS DocumentDB connection string
+    Description: >
+      Managed TLS MongoDB Atlas or AWS DocumentDB connection string with credentials.
+      Must be provided securely at stack creation.
+  FrontendAllowedOrigins:
+    Type: String
+    Default: ""
+    Description: >
+      Optional comma-separated list of authorized web origins for CORS (e.g. https://d12345678abcdef.cloudfront.net).
+      Leave blank to automatically authorize the CloudFront distribution domain created by this template.
+  AlarmNotificationEmail:
+    Type: String
+    Default: ""
+    Description: Optional email address to receive CloudWatch 5xx alarm notifications via Amazon SNS.
+
+Conditions:
+  HasCustomAllowedOrigins: !Not [!Equals [!Ref FrontendAllowedOrigins, ""]]
+  HasNotificationEmail: !Not [!Equals [!Ref AlarmNotificationEmail, ""]]
 
 Resources:
   # 1. Private S3 Storage Bucket for SPA Frontend Artifacts
@@ -117,47 +138,9 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
 
-  # 6. AWS App Runner Service (Fully Managed Containerized Express API)
-  BackendAppRunnerService:
-    Type: AWS::AppRunner::Service
-    Properties:
-      ServiceName: !Sub "${ProjectName}-api-${Environment}"
-      SourceConfiguration:
-        AutoDeploymentsEnabled: false
-        AuthenticationConfiguration:
-          AccessRoleArn: !GetAtt AppRunnerECRAccessRole.Arn
-        ImageRepository:
-          ImageIdentifier: !Ref BackendImageIdentifier
-          ImageRepositoryType: ECR
-          ImageConfiguration:
-            Port: "5000"
-            RuntimeEnvironmentVariables:
-              - Name: NODE_ENV
-                Value: production
-              - Name: PORT
-                Value: "5000"
-              - Name: JWT_SECRET
-                Value: !Ref JwtSecretParameter
-              - Name: MONGODB_URI
-                Value: !Ref DatabaseConnectionString
-      InstanceConfiguration:
-        Cpu: "1024" # 1 vCPU
-        Memory: "2048" # 2 GB RAM
-        InstanceRoleArn: !GetAtt AppRunnerInstanceRole.Arn
-      HealthCheckConfiguration:
-        Protocol: HTTP
-        Path: /api/health
-        Interval: 10
-        Timeout: 5
-        HealthyThreshold: 1
-        UnhealthyThreshold: 3
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-        - Key: Environment
-          Value: !Ref Environment
-
-  # 7. CloudFront Global Edge Distribution (Routes Frontend S3 + API Requests)
+  # 6. CloudFront Global Edge Distribution (Distributes Frontend SPA from S3 via OAC)
+  # Architecture Note: CloudFront serves the static Vite frontend from private S3.
+  # The frontend makes direct API calls to App Runner via VITE_API_URL, secured by CORS.
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
@@ -199,7 +182,7 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # 8. S3 Bucket Policy Enforcing Private Access via CloudFront Service Principal
+  # 7. S3 Bucket Policy Enforcing Private Access via CloudFront Service Principal
   FrontendBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -217,7 +200,62 @@ Resources:
               StringEquals:
                 AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution.Id}"
 
-  # 9. CloudWatch Metric Alarm for Backend 5xx Server Errors
+  # 8. AWS App Runner Service (Containerized Express API Backend)
+  BackendAppRunnerService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: !Sub "${ProjectName}-api-${Environment}"
+      SourceConfiguration:
+        AutoDeploymentsEnabled: false
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AppRunnerECRAccessRole.Arn
+        ImageRepository:
+          ImageIdentifier: !Ref BackendImageIdentifier
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            Port: "5000"
+            RuntimeEnvironmentVariables:
+              - Name: NODE_ENV
+                Value: production
+              - Name: PORT
+                Value: "5000"
+              - Name: JWT_SECRET
+                Value: !Ref JwtSecretParameter
+              - Name: MONGODB_URI
+                Value: !Ref DatabaseConnectionString
+              - Name: ALLOWED_ORIGINS
+                Value: !If
+                  - HasCustomAllowedOrigins
+                  - !Ref FrontendAllowedOrigins
+                  - !Sub "https://${CloudFrontDistribution.DomainName}"
+      InstanceConfiguration:
+        Cpu: "1024" # 1 vCPU
+        Memory: "2048" # 2 GB RAM
+        InstanceRoleArn: !GetAtt AppRunnerInstanceRole.Arn
+      HealthCheckConfiguration:
+        Protocol: HTTP
+        Path: /api/health
+        Interval: 10
+        Timeout: 5
+        HealthyThreshold: 1
+        UnhealthyThreshold: 3
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # 9. Amazon SNS Topic for Operational Alarms (Optional, provisioned when email is provided)
+  AlarmNotificationTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasNotificationEmail
+    Properties:
+      TopicName: !Sub "${ProjectName}-operational-alarms-${Environment}"
+      Subscription:
+        - Endpoint: !Ref AlarmNotificationEmail
+          Protocol: email
+
+  # 10. CloudWatch Metric Alarm for Backend 5xx Server Errors
   Backend5xxErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -234,6 +272,8 @@ Resources:
         - Name: ServiceName
           Value: !Sub "${ProjectName}-api-${Environment}"
       TreatMissingData: notBreaching
+      AlarmActions:
+        - !If [HasNotificationEmail, !Ref AlarmNotificationTopic, !Ref "AWS::NoValue"]
 
 Outputs:
   CloudFrontDistributionURL:

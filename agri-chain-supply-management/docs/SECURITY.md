@@ -11,10 +11,14 @@
 ### A. Authentication & Credential Protection
 * **Password Hashing:** Passwords are cryptographically hashed using **bcrypt** with a salt work factor of 10 (`bcryptjs`).
 * **Safe Error Handling:** Authentication error responses return generic messages (`"Invalid username or password."`). Password disclosure hints in error responses have been removed.
-* **Token Architecture:** Replaced insecure timestamp tokens with **signed JSON Web Tokens (JWTs)**:
-  * Signed using HMAC SHA-256 with a dedicated `JWT_SECRET`.
-  * Standard 24-hour expiration (`exp`), subject claims (`id`, `username`, `role`, `walletAddress`).
+* **Token Architecture:** Signed **JSON Web Tokens (JWTs)** with 24-hour expiration (`exp`), subject claims (`id`, `username`, `role`, `walletAddress`).
   * Tokens are parsed exclusively via the `Authorization: Bearer <token>` header.
+* **Production Secret Enforcement:** When running in production (`NODE_ENV === "production"`), the server validates `JWT_SECRET` at startup, requiring at least 32 characters of high-entropy cryptographic material and rejecting placeholder defaults with a fatal startup error.
+* **Cryptographic Wallet Ownership Verification (SIWE Flow):**
+  * Implements Sign-In with Ethereum (SIWE) challenge-response protocol (`/api/auth/wallet/nonce` and `/api/auth/wallet/verify`).
+  * Single-use cryptographic nonces (`crypto.randomBytes(16)`) expire after 5 minutes.
+  * Server-side signature verification recovers signer address using `ethers.verifyMessage` without requiring gas fees or private key exposure.
+  * Consumed nonces are invalidated immediately to prevent replay attacks.
 * **Brute-Force & Rate Limiting:** Configured `express-rate-limit` restricting IPs to **100 requests per 15-minute window** on `/api/auth/*` endpoints.
 
 ### B. Role-Based Authorization & Custody Enforcement

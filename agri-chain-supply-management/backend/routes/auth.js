@@ -3,8 +3,9 @@ const express = require("express");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
+const { ethers } = require("ethers");
 const User = require("../models/User");
-const { authenticate, JWT_SECRET } = require("../middleware/auth");
+const { authenticate, optionalAuth, JWT_SECRET } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -265,6 +266,135 @@ router.post("/register", authLimiter, async (req, res) => {
     token,
     user: safeUser
   });
+});
+
+// --- Cryptographic Wallet Ownership Verification (SIWE Challenge-Response Flow) ---
+const walletChallenges = new Map();
+
+function cleanExpiredChallenges() {
+  const now = Date.now();
+  for (const [wallet, challenge] of walletChallenges.entries()) {
+    if (challenge.expiresAt < now) {
+      walletChallenges.delete(wallet);
+    }
+  }
+}
+
+// POST /api/auth/wallet/nonce - Request single-use challenge nonce for wallet signature
+router.post("/wallet/nonce", (req, res) => {
+  const { walletAddress } = req.body;
+  if (!walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+    return res.status(400).json({
+      success: false,
+      message: "A valid 40-character hexadecimal Ethereum wallet address is required."
+    });
+  }
+
+  cleanExpiredChallenges();
+
+  const normalized = walletAddress.toLowerCase();
+  const nonce = crypto.randomBytes(16).toString("hex");
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minute validity window
+  const issuedAt = new Date().toISOString();
+
+  const message = [
+    "AgriChain Supply Chain Traceability Platform",
+    "Sign this challenge message to verify ownership of your Ethereum wallet address.",
+    `Wallet Address: ${normalized}`,
+    `Session Nonce: ${nonce}`,
+    `Issued At: ${issuedAt}`,
+    "Note: This signature verification does not execute an on-chain transaction or incur any gas fees."
+  ].join("\n");
+
+  walletChallenges.set(normalized, {
+    nonce,
+    message,
+    expiresAt,
+    used: false
+  });
+
+  return res.json({
+    success: true,
+    walletAddress: normalized,
+    nonce,
+    message,
+    expiresInSeconds: 300
+  });
+});
+
+// POST /api/auth/wallet/verify - Verify ECDSA cryptographic signature and bind verified wallet
+router.post("/wallet/verify", optionalAuth, async (req, res) => {
+  const { walletAddress, signature, nonce } = req.body;
+
+  if (!walletAddress || !signature) {
+    return res.status(400).json({
+      success: false,
+      message: "walletAddress and signature are required."
+    });
+  }
+
+  cleanExpiredChallenges();
+
+  const normalized = walletAddress.toLowerCase();
+  const challenge = walletChallenges.get(normalized);
+
+  if (!challenge || challenge.used || challenge.expiresAt < Date.now()) {
+    return res.status(400).json({
+      success: false,
+      message: "Challenge nonce is expired, invalid, or already consumed. Please request a new nonce."
+    });
+  }
+
+  if (nonce && challenge.nonce !== nonce) {
+    return res.status(400).json({
+      success: false,
+      message: "Nonce mismatch. Challenge is invalid."
+    });
+  }
+
+  try {
+    const recoveredAddress = ethers.verifyMessage(challenge.message, signature);
+
+    if (recoveredAddress.toLowerCase() !== normalized) {
+      return res.status(401).json({
+        success: false,
+        verified: false,
+        message: `Cryptographic signature mismatch: Signer address (${recoveredAddress.toLowerCase()}) does not match supplied wallet (${normalized}).`
+      });
+    }
+
+    // Mark challenge as consumed (anti-replay guard)
+    challenge.used = true;
+    walletChallenges.delete(normalized);
+
+    // If an authenticated session exists, bind verified wallet to stakeholder profile
+    let updatedUser = null;
+    if (req.user && req.user.username) {
+      const userDoc = await User.findOne({ username: req.user.username });
+      if (userDoc) {
+        userDoc.walletAddress = normalized;
+        userDoc.walletVerified = true;
+        if (typeof userDoc.save === "function") {
+          await userDoc.save();
+        }
+        updatedUser = typeof userDoc.toJSON === "function" ? userDoc.toJSON() : userDoc;
+      }
+    }
+
+    return res.json({
+      success: true,
+      verified: true,
+      walletAddress: normalized,
+      user: updatedUser,
+      message: "Wallet ownership cryptographically verified via ECDSA signature."
+    });
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      verified: false,
+      message: `Signature verification error: ${err.message}`
+    });
+  }
 });
 
 module.exports = { router, ROLE_CONFIG };
