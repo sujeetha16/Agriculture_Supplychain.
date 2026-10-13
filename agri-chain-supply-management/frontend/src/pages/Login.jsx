@@ -311,62 +311,64 @@ export default function Login() {
           {/* ========================================================== */}
           {activeTab === "login" && (
             <div>
-              {/* Preset Credentials Reference & 1-Click Access Card */}
-              <div className="agri-card mb-4 border-success-subtle">
-                <div className="agri-card-header bg-success-subtle bg-opacity-25 d-flex align-items-center justify-content-between flex-wrap gap-2">
-                  <div className="d-flex align-items-center gap-2">
-                    <i className="bi bi-key-fill text-success fs-5"></i>
-                    <div>
-                      <strong className="text-dark small">Pre-Configured Stakeholder Credentials</strong>
-                      <div className="text-muted" style={{ fontSize: "0.75rem" }}>
-                        Click any role card below to auto-fill credentials and sign in instantly.
+              {/* Preset Credentials Reference & 1-Click Access Card (Development / Demo Sandbox Only) */}
+              {!import.meta.env.PROD && (
+                <div className="agri-card mb-4 border-success-subtle">
+                  <div className="agri-card-header bg-success-subtle bg-opacity-25 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div className="d-flex align-items-center gap-2">
+                      <i className="bi bi-key-fill text-success fs-5"></i>
+                      <div>
+                        <strong className="text-dark small">Pre-Configured Stakeholder Credentials (Dev & Academic Sandbox)</strong>
+                        <div className="text-muted" style={{ fontSize: "0.75rem" }}>
+                          Click any role card below to auto-fill credentials and sign in instantly for evaluation.
+                        </div>
                       </div>
                     </div>
+                    <span className="badge bg-success text-white small">Dev Sandbox Only</span>
                   </div>
-                  <span className="badge bg-success text-white small">Ready for Demo</span>
-                </div>
 
-                <div className="agri-card-body p-3">
-                  <div className="row g-3">
-                    {PRESET_CREDENTIALS.map((p) => {
-                      const isActive = user?.username === p.username;
-                      return (
-                        <div className="col-md-6 col-lg-3" key={p.role}>
-                          <div
-                            className={`p-3 rounded-3 border h-100 transition position-relative ${isActive ? "border-success bg-success-subtle bg-opacity-25 shadow-sm" : "bg-light"}`}
-                          >
-                            <div className="d-flex align-items-center justify-content-between mb-1">
-                              <span className="fs-3">{p.avatar}</span>
-                              <span className={`badge bg-${p.badgeColor}-subtle text-${p.badgeColor} border small`}>
-                                {p.roleName}
-                              </span>
-                            </div>
-                            <div className="fw-bold text-dark small text-truncate" title={p.name}>{p.name}</div>
-                            <div className="text-muted text-truncate" style={{ fontSize: "0.75rem" }} title={p.organization}>
-                              {p.organization}
-                            </div>
-
-                            <div className="p-2 bg-white rounded border small mt-2 font-monospace" style={{ fontSize: "0.72rem" }}>
-                              <div><strong>user:</strong> {p.username}</div>
-                              <div><strong>pass:</strong> {p.password}</div>
-                            </div>
-
-                            <button
-                              type="button"
-                              className={`btn btn-sm w-100 mt-2 fw-semibold ${isActive ? "btn-outline-success" : "btn-success"}`}
-                              disabled={isSubmitting}
-                              onClick={() => handleAutoFillLogin(p)}
+                  <div className="agri-card-body p-3">
+                    <div className="row g-3">
+                      {PRESET_CREDENTIALS.map((p) => {
+                        const isActive = user?.username === p.username;
+                        return (
+                          <div className="col-md-6 col-lg-3" key={p.role}>
+                            <div
+                              className={`p-3 rounded-3 border h-100 transition position-relative ${isActive ? "border-success bg-success-subtle bg-opacity-25 shadow-sm" : "bg-light"}`}
                             >
-                              <i className="bi bi-box-arrow-in-right me-1"></i>
-                              {isActive ? "Active Portal" : "Fill & Sign In"}
-                            </button>
+                              <div className="d-flex align-items-center justify-content-between mb-1">
+                                <span className="fs-3">{p.avatar}</span>
+                                <span className={`badge bg-${p.badgeColor}-subtle text-${p.badgeColor} border small`}>
+                                  {p.roleName}
+                                </span>
+                              </div>
+                              <div className="fw-bold text-dark small text-truncate" title={p.name}>{p.name}</div>
+                              <div className="text-muted text-truncate" style={{ fontSize: "0.75rem" }} title={p.organization}>
+                                {p.organization}
+                              </div>
+
+                              <div className="p-2 bg-white rounded border small mt-2 font-monospace" style={{ fontSize: "0.72rem" }}>
+                                <div><strong>user:</strong> {p.username}</div>
+                                <div><strong>pass:</strong> {p.password}</div>
+                              </div>
+
+                              <button
+                                type="button"
+                                className={`btn btn-sm w-100 mt-2 fw-semibold ${isActive ? "btn-outline-success" : "btn-success"}`}
+                                disabled={isSubmitting}
+                                onClick={() => handleAutoFillLogin(p)}
+                              >
+                                <i className="bi bi-box-arrow-in-right me-1"></i>
+                                {isActive ? "Active Portal" : "Fill & Sign In"}
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Standard Sign-In Form */}
               <div className="row justify-content-center">

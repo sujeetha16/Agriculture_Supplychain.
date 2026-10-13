@@ -308,6 +308,21 @@ const User = {
     return wrapUserDocument(newUser);
   },
 
+  async resetToDefault() {
+    if (isMongoConnected()) {
+      await MongoUserModel.deleteMany({});
+      return;
+    }
+    const seeded = DEFAULT_USERS_SEED.map((u) => {
+      const salt = bcrypt.genSaltSync(10);
+      const hash = bcrypt.hashSync(u.passwordPlain, salt);
+      const copy = { ...u, password: hash };
+      delete copy.passwordPlain;
+      return copy;
+    });
+    writeLocalUsers(seeded);
+  },
+
   DEFAULT_USERS_SEED
 };
 

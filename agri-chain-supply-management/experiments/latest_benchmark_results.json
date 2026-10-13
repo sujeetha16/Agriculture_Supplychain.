@@ -1,0 +1,26 @@
+{
+  "testMetadata": {
+    "benchmarkCategory": "Off-Chain Localhost HTTP API Smoke / Load Test",
+    "disclaimer": "Measures local process HTTP throughput and loopback latency. Does not represent AWS cloud or Ethereum blockchain consensus performance.",
+    "targetUrl": "http://localhost:5099/api/products",
+    "isLocalhost": true,
+    "concurrencyVUs": 10,
+    "totalRequests": 100,
+    "timestamp": "2026-10-13T08:31:34.753Z"
+  },
+  "performanceMetrics": {
+    "totalDurationMs": 197,
+    "throughputRps": 507.61,
+    "successCount": 100,
+    "failureCount": 0,
+    "errorRatePercent": 0,
+    "latencyMs": {
+      "min": 14.93,
+      "p50": 18.22,
+      "p90": 20.36,
+      "p95": 22.7,
+      "p99": 29.03,
+      "max": 29.62
+    }
+  }
+}

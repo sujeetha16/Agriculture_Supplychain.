@@ -82,6 +82,13 @@ before(async () => {
 });
 
 after(async () => {
+  if (typeof Product.resetToDefault === "function") {
+    await Product.resetToDefault();
+  }
+  const User = require("../models/User");
+  if (typeof User.resetToDefault === "function") {
+    await User.resetToDefault();
+  }
   if (server) {
     await new Promise((resolve) => server.close(resolve));
   }

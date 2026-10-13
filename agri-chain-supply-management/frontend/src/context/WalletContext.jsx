@@ -47,13 +47,20 @@ export function WalletProvider({ children }) {
     }
   }, [currentUser]);
 
-  // Login function with backend call and robust local fallback
+  // Login function with backend authoritative authentication
   async function login(username, password) {
     const ident = (username || "").toLowerCase().trim();
     const cleanPassword = (password || "").trim();
 
+    if (!ident || !cleanPassword) {
+      return {
+        success: false,
+        message: "Both username and password are required."
+      };
+    }
+
     try {
-      // 1. Attempt API login
+      // 1. Authoritative Backend Authentication
       const res = await loginUser({ username: ident, password: cleanPassword });
       if (res && res.success && res.user) {
         saveCustomStakeholder(res.user);
@@ -63,13 +70,25 @@ export function WalletProvider({ children }) {
         return { success: true, user: res.user };
       }
     } catch (apiErr) {
-      // If API returned a specific 400/401/404 error message, check it
-      if (apiErr.response?.data?.message) {
-        // Fall back to local check if API is unreachable or offline
+      // If the backend API responded with 400/401/403/etc., fail closed immediately.
+      // A rejected login must NEVER silently trigger a successful local login.
+      if (apiErr.response) {
+        return {
+          success: false,
+          message: apiErr.response.data?.message || "Invalid username or password."
+        };
       }
     }
 
-    // 2. Local Fallback Validation
+    // In production, network failure or missing API must NOT fall back to local unverified accounts.
+    if (import.meta.env.PROD) {
+      return {
+        success: false,
+        message: "Backend authentication service is unavailable. Please verify network connectivity."
+      };
+    }
+
+    // 2. Development-Only Offline Fallback (Sandbox / Disconnected dev testing only)
     const all = getAllStakeholders();
     const found = all.find(
       (s) => s.username.toLowerCase() === ident || s.email.toLowerCase() === ident
@@ -78,22 +97,23 @@ export function WalletProvider({ children }) {
     if (!found) {
       return {
         success: false,
-        message: "No registered stakeholder found with this username or email. Please register as a new user."
+        message: "Invalid username or password."
       };
     }
 
-    // Check password
+    // Validate password without leaking credentials
     const validPass =
-      !cleanPassword || // if empty in demo mode
       cleanPassword === found.password ||
       cleanPassword === "Pass@1234" ||
-      cleanPassword === "demo123" ||
-      cleanPassword.toLowerCase() === `${found.username.toLowerCase()}123`;
+      cleanPassword === "Farmer@123" ||
+      cleanPassword === "Distributor@123" ||
+      cleanPassword === "Retailer@123" ||
+      cleanPassword === "Consumer@123";
 
     if (!validPass) {
       return {
         success: false,
-        message: `Incorrect password for @${found.username}. Default password is: '${found.password || "Farmer@123"}'`
+        message: "Invalid username or password."
       };
     }
 
@@ -102,10 +122,10 @@ export function WalletProvider({ children }) {
     return { success: true, user: found };
   }
 
-  // Register function with backend call and robust local fallback
+  // Register function with backend authoritative persistence
   async function register(userData) {
     try {
-      // 1. Attempt backend registration
+      // 1. Authoritative Backend Registration
       const res = await registerUser(userData);
       if (res && res.success && res.user) {
         saveCustomStakeholder(res.user);
@@ -115,16 +135,24 @@ export function WalletProvider({ children }) {
         return { success: true, user: res.user };
       }
     } catch (apiErr) {
-      if (apiErr.response?.data?.errors) {
+      if (apiErr.response) {
         return {
           success: false,
-          message: apiErr.response.data.message || "Validation failed",
-          errors: apiErr.response.data.errors
+          message: apiErr.response.data?.message || "Registration validation failed.",
+          errors: apiErr.response.data?.errors
         };
       }
     }
 
-    // 2. Local Registration Fallback
+    // In production, registration requires backend persistence
+    if (import.meta.env.PROD) {
+      return {
+        success: false,
+        message: "Backend service is unavailable. Registration cannot be completed."
+      };
+    }
+
+    // 2. Development-Only Local Registration Fallback
     const roleConfig = {
       1: { roleName: "Farmer", avatar: "👨‍🌾", badgeColor: "success" },
       2: { roleName: "Distributor", avatar: "🚚", badgeColor: "warning" },
@@ -135,7 +163,7 @@ export function WalletProvider({ children }) {
     const numRole = Number(userData.role) || 1;
     const roleInfo = roleConfig[numRole] || roleConfig[1];
 
-    // Generate random 40-char wallet hex
+    // Generate random 40-char wallet hex for dev sandbox
     const randomHex = Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
     const generatedAddress = `0x${randomHex}`;
 
@@ -162,8 +190,12 @@ export function WalletProvider({ children }) {
     return { success: true, user: newUser };
   }
 
-  // Quick 1-click Role Login
+  // Quick 1-click Role Login (Development Sandbox Only)
   function loginAsRole(roleNumber) {
+    if (import.meta.env.PROD) {
+      console.warn("1-Click Role Login is strictly disabled in production builds.");
+      return null;
+    }
     const all = getAllStakeholders();
     const found = all.find((s) => s.role === Number(roleNumber));
     if (found) {
@@ -174,7 +206,7 @@ export function WalletProvider({ children }) {
     return null;
   }
 
-  // Logout function
+  // Logout function: thoroughly clears active authentication state
   function logout() {
     try {
       sessionStorage.removeItem("agri_token");

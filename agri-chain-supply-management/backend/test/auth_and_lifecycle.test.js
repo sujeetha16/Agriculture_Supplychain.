@@ -9,11 +9,15 @@ let baseUrl;
 
 const { connectDB } = require("../config/db");
 const Product = require("../models/Product");
+const User = require("../models/User");
 
 before(async () => {
   await connectDB();
   if (typeof Product.resetToDefault === "function") {
     await Product.resetToDefault();
+  }
+  if (typeof User.resetToDefault === "function") {
+    await User.resetToDefault();
   }
   // Bind to ephemeral port for testing
   server = http.createServer(app);
@@ -23,6 +27,12 @@ before(async () => {
 });
 
 after(async () => {
+  if (typeof Product.resetToDefault === "function") {
+    await Product.resetToDefault();
+  }
+  if (typeof User.resetToDefault === "function") {
+    await User.resetToDefault();
+  }
   if (server) {
     await new Promise((resolve) => server.close(resolve));
   }

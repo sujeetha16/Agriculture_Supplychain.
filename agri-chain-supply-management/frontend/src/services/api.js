@@ -6,10 +6,10 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" }
 });
 
-// Automatically inject JWT authentication header
+// Automatically inject JWT authentication header from deliberate sessionStorage
 api.interceptors.request.use((config) => {
   try {
-    const token = sessionStorage.getItem("agri_token") || localStorage.getItem("agri_token");
+    const token = sessionStorage.getItem("agri_token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -21,7 +21,6 @@ export async function loginUser(credentials) {
   const { data } = await api.post("/auth/login", credentials);
   if (data && data.token) {
     sessionStorage.setItem("agri_token", data.token);
-    localStorage.setItem("agri_token", data.token);
   }
   return data;
 }
@@ -30,7 +29,6 @@ export async function registerUser(userData) {
   const { data } = await api.post("/auth/register", userData);
   if (data && data.token) {
     sessionStorage.setItem("agri_token", data.token);
-    localStorage.setItem("agri_token", data.token);
   }
   return data;
 }
@@ -38,8 +36,11 @@ export async function registerUser(userData) {
 export function logoutUser() {
   sessionStorage.removeItem("agri_token");
   sessionStorage.removeItem("agri_current_user");
-  localStorage.removeItem("agri_token");
-  localStorage.removeItem("agri_current_user");
+  // Clean any legacy localStorage keys
+  try {
+    localStorage.removeItem("agri_token");
+    localStorage.removeItem("agri_current_user");
+  } catch (_) {}
 }
 
 export async function getProducts() {

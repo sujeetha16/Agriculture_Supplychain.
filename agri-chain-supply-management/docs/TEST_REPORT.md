@@ -3,7 +3,7 @@
 **Evaluation Project:** Agriculture Supply Chain Traceability Platform  
 **Testing Environment:** Node.js v24.12.0, npm 11.6.2, Windows 11 Host, Vite 5.4, Hardhat 2.22  
 **Report Date:** October 2026  
-**Overall Status:** **49/49 Automated Tests Passing (100% Pass Rate across Backend & Smart Contract Suites), Frontend Bundle Built Cleanly**
+**Overall Status:** **61/61 Automated Tests Passing (100% Pass Rate across Backend, QR Resolution & Smart Contract Suites), Frontend Bundle Built Cleanly**
 
 ---
 
@@ -13,8 +13,9 @@
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Backend API Security & Lifecycle** | `node:test` + native fetch | 12 | 12 | 0 | **PASS (100%)** |
 | **Blockchain Verification & Concurrency** | `node:test` + ethers v6 | 25 | 25 | 0 | **PASS (100%)** |
+| **QR Code Payload Resolution & Parser** | `node:test` unit suite | 12 | 12 | 0 | **PASS (100%)** |
 | **Smart Contract Suite** | Hardhat / Mocha / Chai | 12 | 12 | 0 | **PASS (100%)** |
-| **Frontend Production Build** | Vite 5 (Rollup) | 279 modules | 279 | 0 | **PASS (Clean)** |
+| **Frontend Production Build** | Vite 5 (Rollup, Code-Split) | 284 modules | 284 | 0 | **PASS (Clean)** |
 | **Local Smoke Micro-Benchmark** | `load_test_native.js` | 100 requests | 100 | 0 | **PASS (0% Err)** |
 
 ---
@@ -67,7 +68,23 @@
   25. CloudFormation template enforces KMS least privilege, RPC parameters, and alarm dependencies
 
 
-### Suite 3: Hardhat Smart Contract Lifecycle & Access Control (12 Tests)
+### Suite 3: QR Code Payload Resolution & Parser (12 Tests)
+* **Command:** `npm test` (inside `agri-chain-supply-management/backend`)
+* **Coverage:**
+  1. Standard JSON payload containing productId (`{"productId": 101, ...}`)
+  2. JSON payload containing id property (`{"id": 8801, ...}`)
+  3. Absolute HTTPS URL containing `/trace/:id` (`https://domain.com/trace/102`)
+  4. Relative URL containing `/trace/:id` (`/trace/9088`)
+  5. Raw integer batch ID (`101`)
+  6. Hash-prefixed batch ID (`#8801`)
+  7. BATCH-prefixed identifier (`BATCH-9088`)
+  8. Fails safely on malformed JSON payload (`{ productId: 101, name: broken`)
+  9. Fails safely on JSON missing productId and id (`{"name": "Unknown"}`)
+  10. Fails safely on JSON with negative or non-integer productId (`{"productId": -5}`)
+  11. Fails safely on completely unrelated URL or search text (`https://google.com/...`)
+  12. Fails safely on empty, null, or non-string input (`""`, `null`, `undefined`, number)
+
+### Suite 4: Hardhat Smart Contract Lifecycle & Access Control (12 Tests)
 * **Command:** `npx hardhat test` (inside `agri-chain-supply-management/blockchain`)
 * **Coverage:**
   * Role Registration & Access Control (3 tests)
@@ -75,21 +92,24 @@
   * Complete Legitimate Supply-Chain Transition Cycle (1 test)
   * Negative Security & State-Machine Violations (5 tests)
 
-### Suite 4: Frontend Production Bundle Compilation
+### Suite 5: Frontend Production Bundle Compilation
 * **Command:** `npm run build` (inside `agri-chain-supply-management/frontend`)
 * **Output:**
   ```
   vite v5.4.21 building for production...
-  ✓ 279 modules transformed.
-  dist/index.html                               1.19 kB │ gzip:   0.69 kB
+  ✓ 284 modules transformed.
+  dist/index.html                               1.42 kB │ gzip:   0.74 kB
   dist/assets/bootstrap-icons-mSm7cUeB.woff2  134.04 kB
   dist/assets/bootstrap-icons-BeopsB42.woff   180.29 kB
   dist/assets/index-BJydt2Zx.css              315.90 kB │ gzip:  47.07 kB
-  dist/assets/index-BSNlgZzY.js               952.37 kB │ gzip: 304.68 kB
-  ✓ built in 4.61s
+  dist/assets/index-NZ_sv2Dh.js               123.64 kB │ gzip:  28.57 kB
+  dist/assets/vendor-iqr3Fnrv.js              215.56 kB │ gzip:  72.51 kB
+  dist/assets/web3-CR56BBeQ.js                267.31 kB │ gzip:  99.05 kB
+  dist/assets/scanner-BPKgJl4x.js             351.28 kB │ gzip: 106.39 kB
+  ✓ built in 3.75s (zero bundle warnings)
   ```
 
-### Suite 5: Local API Smoke Micro-Benchmark
+### Suite 6: Local API Smoke Micro-Benchmark
 * **Command:** `node experiments/load_test_native.js --url http://localhost:5000 --endpoint /api/products --users 10 --requests 100`
 * **Benchmark Integrity Notice:**
   * **Target:** Localhost HTTP server (`http://localhost:5000/api/products`).

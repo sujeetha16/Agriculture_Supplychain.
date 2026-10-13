@@ -5,6 +5,8 @@ import { Html5Qrcode } from "html5-qrcode";
 import { QRCodeSVG } from "qrcode.react";
 import { getProducts } from "../services/api";
 
+import { parseQRPayload } from "../utils/qrParser";
+
 export default function ScanQR() {
   const scannerRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -59,31 +61,13 @@ export default function ScanQR() {
 
   function handleDecodedText(decodedText) {
     if (!decodedText) return;
-
-    try {
-      const data = JSON.parse(decodedText);
-      if (data.productId) {
-        stopCamera();
-        navigate(`/trace/${data.productId}`);
-        return;
-      }
-    } catch {}
-
-    const urlMatch = decodedText.match(/\/trace\/(\d+)/i);
-    if (urlMatch && urlMatch[1]) {
+    const result = parseQRPayload(decodedText);
+    if (result.success && result.productId) {
       stopCamera();
-      navigate(`/trace/${urlMatch[1]}`);
+      navigate(`/trace/${result.productId}`);
       return;
     }
-
-    const numMatch = decodedText.trim().match(/^#?(\d+)$/);
-    if (numMatch && numMatch[1]) {
-      stopCamera();
-      navigate(`/trace/${numMatch[1]}`);
-      return;
-    }
-
-    setCameraError(`Unrecognized QR code content: "${decodedText.slice(0, 45)}...".`);
+    setCameraError(result.error || `Unrecognized QR code content: "${decodedText.slice(0, 45)}...".`);
   }
 
   async function startCamera() {

@@ -5,7 +5,7 @@
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.24-363636.svg)](https://soliditylang.org/)
 [![Hardhat](https://img.shields.io/badge/Hardhat-2.22-yellow.svg)](https://hardhat.org/)
 [![AWS CloudFormation](https://img.shields.io/badge/AWS-CloudFormation-orange.svg)](https://aws.amazon.com/cloudformation/)
-[![Tests](https://img.shields.io/badge/Tests-49%20Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-61%20Passing-brightgreen.svg)]()
 
 A cloud-native agricultural provenance, cold-chain logistics, and traceability platform engineered for a **College Cloud Computing Course Capstone** and **Applied Systems Research Evaluation**. Combines containerized Express microservices on AWS App Runner, high-performance edge delivery via Amazon CloudFront (with Origin Access Control), resilient database persistence, and decentralized Ethereum Sepolia smart-contract verification.
 
@@ -17,7 +17,7 @@ To maintain rigorous academic and engineering honesty, this table documents the 
 
 | Component | Status | Implementation Details & Evidence |
 | :--- | :--- | :--- |
-| **Frontend SPA** | **VERIFIED & BUILT** | React 18, Vite 5, Bootstrap 5. 279 modules build cleanly into `dist/`. |
+| **Frontend SPA** | **VERIFIED & BUILT** | React 18, Vite 5, Bootstrap 5. 284 modules build cleanly into code-split chunks (zero chunk size warnings). |
 | **Backend REST API** | **VERIFIED & TESTED** | Express 4, correlation IDs (`x-request-id`), structured CloudWatch logs, health checks. |
 | **Authentication & Security** | **HARDENED & TESTED** | Passwords hashed with **bcrypt**; strong production **JWT_SECRET** validation; SIWE **wallet challenge-response signature verification**; origin-restricted CORS allowlists. |
 | **Supply Chain State Machine**| **VERIFIED & TESTED** | Linear 5-state lifecycle (Created $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Sold) with atomic conditional DB updates preventing race conditions. |
@@ -119,19 +119,20 @@ npx hardhat test
 ```
 *Tests role registration, product creation, sequential Farmer $\rightarrow$ Distributor $\rightarrow$ Retailer $\rightarrow$ Consumer transitions, and negative access control attacks.*
 
-### Run Backend API & Security Suite (27 Tests)
+### Run Backend API, Blockchain & QR Verification Suite (49 Tests)
 ```bash
 cd agri-chain-supply-management/backend
 npm test
 ```
-*Executes all 27 automated tests across two comprehensive suites:*
-* *`auth_and_lifecycle.test.js` (12 tests): `/api/health`, registration validation, password hashing, JWT authentication, role enforcement, duplicate prevention, and lifecycle state transitions.*
-* *`blockchain_verification.test.js` (15 tests): Contract address validation, event log ABI decoding, product ID matching, stakeholder identity verification, reverted tx blocking, pending tx handling, unverified state blocking DB, duplicate tx prevention, and SIWE wallet challenge verification.*
+*Executes all 49 automated tests across three comprehensive suites:*
+* *`auth_and_lifecycle.test.js` (12 tests): `/api/health`, registration validation, password hashing, JWT authentication, role enforcement, duplicate prevention, and sequential lifecycle state transitions.*
+* *`blockchain_verification.test.js` (25 tests): Contract address validation, event log ABI decoding, product ID matching, stakeholder identity verification, reverted tx blocking, pending tx handling, unverified state blocking DB, duplicate tx prevention, SIWE wallet challenge verification, CloudFormation validation, and fail-closed security.*
+* *`qr_payload.test.js` (12 tests): Positive/negative parsing for JSON formats (`productId`, `id`), absolute/relative `/trace/:id` URLs, raw batch integers, prefixed IDs, malformed JSON, and invalid inputs.*
 
 ### Run Empirical Performance Load Test
 ```bash
 # Benchmark local API with 10 virtual users across 100 requests (Local loopback smoke test)
-node experiments/load_test_native.js --url http://localhost:5000 --users 10 --requests 100
+node experiments/run_local_benchmark.js
 ```
 
 ---
@@ -196,5 +197,6 @@ aws cloudfront create-invalidation --distribution-id <DISTRIBUTION_ID> --paths "
 * [`docs/BLOCKCHAIN_ARCHITECTURE.md`](file:///c:/Users/ADMIN/Documents/Agriculture_Supplychain/docs/BLOCKCHAIN_ARCHITECTURE.md) — Smart contract state machine, gas optimization, and storage boundaries.
 * [`docs/BLOCKCHAIN_TESTING.md`](file:///c:/Users/ADMIN/Documents/Agriculture_Supplychain/docs/BLOCKCHAIN_TESTING.md) — Hardhat testing report with test counts and reproduction steps.
 * [`docs/TEST_REPORT.md`](file:///c:/Users/ADMIN/Documents/Agriculture_Supplychain/docs/TEST_REPORT.md) — Comprehensive test execution logs and benchmark results.
+* [`docs/PERFORMANCE_REPORT.md`](file:///c:/Users/ADMIN/Documents/Agriculture_Supplychain/docs/PERFORMANCE_REPORT.md) — High-concurrency empirical benchmark measurements, latency distributions, and measurement boundary definitions.
 * [`experiments/README.md`](file:///c:/Users/ADMIN/Documents/Agriculture_Supplychain/experiments/README.md) — Load testing methodology and workload definitions.
 * [`research/RESEARCH_PLAN.md`](file:///c:/Users/ADMIN/Documents/Agriculture_Supplychain/research/RESEARCH_PLAN.md) — Academic research plan, research questions (RQs), and bibliography.
