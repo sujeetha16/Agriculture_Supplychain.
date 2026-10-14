@@ -4,6 +4,7 @@ import { WalletProvider, useWallet } from "./context/WalletContext";
 import Layout from "./components/Layout";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import RegisterRole from "./pages/RegisterRole";
 import Dashboard from "./pages/Dashboard";
 import FarmerAddProduct from "./pages/FarmerAddProduct";
 import ProductActions from "./pages/ProductActions";
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="/scan" element={<ProtectedRoute><ScanQR /></ProtectedRoute>} />
             <Route path="/cloud-architecture" element={<ProtectedRoute><CloudArchitecture /></ProtectedRoute>} />
             <Route path="/about" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+            <Route path="/register-role" element={<ProtectedRoute><RegisterRole /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>

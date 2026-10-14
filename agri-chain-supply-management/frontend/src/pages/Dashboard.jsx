@@ -9,7 +9,17 @@ import Alert from "../components/Alert";
 const roleNames = { 1: "Farmer", 2: "Distributor", 3: "Retailer", 4: "Consumer" };
 
 export default function Dashboard() {
-  const { user, address } = useWallet();
+  const {
+    user,
+    address,
+    metaMaskAddress,
+    useMetaMaskSigner,
+    isSepolia,
+    chainId,
+    onChainRole,
+    onChainRoleName,
+    switchToSepolia
+  } = useWallet();
   const [products, setProducts] = useState([]);
   const [stats, setStats] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -108,11 +118,61 @@ export default function Dashboard() {
           >
             <i className="bi bi-arrow-counterclockwise me-1"></i>Reset Demo Catalog
           </button>
+          <Link to="/register-role" className="btn btn-outline-success btn-sm px-3" title="Register or view on-chain role">
+            <i className="bi bi-person-badge me-1"></i>Register Role
+          </Link>
           <Link to="/farmer/add" className="btn btn-success btn-sm px-3">
             <i className="bi bi-plus-lg me-1"></i>Register New Batch
           </Link>
         </div>
       </div>
+
+      {/* On-Chain Status Banners in MetaMask Mode */}
+      {useMetaMaskSigner && metaMaskAddress && (
+        <div className="mb-4">
+          {!isSepolia ? (
+            <div className="alert alert-danger d-flex align-items-center justify-content-between">
+              <div>
+                <i className="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+                <strong>Wrong Network:</strong> MetaMask is on Chain ID {chainId}. Please switch to Ethereum Sepolia (11155111).
+              </div>
+              <button className="btn btn-danger btn-sm fw-semibold" onClick={switchToSepolia}>
+                Switch to Sepolia
+              </button>
+            </div>
+          ) : onChainRole === 0 ? (
+            <div className="alert alert-warning d-flex align-items-center justify-content-between">
+              <div>
+                <i className="bi bi-exclamation-circle-fill me-2 fs-5 text-warning"></i>
+                <strong>Wallet Not Registered on Smart Contract:</strong> Connected wallet (<code>{metaMaskAddress.slice(0, 10)}...{metaMaskAddress.slice(-6)}</code>) has not registered a role on the AgriChain Sepolia contract.
+              </div>
+              <Link to="/register-role" className="btn btn-warning btn-sm fw-semibold">
+                <i className="bi bi-person-badge me-1"></i>Register Role on Sepolia
+              </Link>
+            </div>
+          ) : onChainRole === 1 ? (
+            <div className="alert alert-success d-flex align-items-center justify-content-between py-2">
+              <div className="small">
+                <i className="bi bi-patch-check-fill text-success me-2 fs-5"></i>
+                <strong>Verified Sepolia Farmer:</strong> Wallet <code>{metaMaskAddress.slice(0, 10)}...{metaMaskAddress.slice(-6)}</code> is registered as Farmer (Role 1). Authorized to create crop batches.
+              </div>
+              <Link to="/farmer/add" className="btn btn-success btn-sm py-1 px-3">
+                <i className="bi bi-plus-circle me-1"></i>Register New Batch
+              </Link>
+            </div>
+          ) : onChainRole ? (
+            <div className="alert alert-info d-flex align-items-center justify-content-between py-2">
+              <div className="small">
+                <i className="bi bi-info-circle-fill text-primary me-2 fs-5"></i>
+                <strong>Connected as On-Chain {onChainRoleName}:</strong> Wallet <code>{metaMaskAddress.slice(0, 10)}...{metaMaskAddress.slice(-6)}</code> is registered with Role {onChainRole}.
+              </div>
+              <Link to="/register-role" className="btn btn-outline-primary btn-sm py-1 px-3">
+                View Role Details
+              </Link>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       <Alert message={error} onClose={() => setError("")} />
       {actionSuccess && (

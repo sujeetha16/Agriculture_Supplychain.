@@ -1,6 +1,6 @@
 // Path: frontend/src/context/WalletContext.jsx
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { connectWallet, SEPOLIA_CHAIN_ID } from "../services/blockchain";
+import { connectWallet, SEPOLIA_CHAIN_ID, getWalletRole, ROLE_NAMES, switchToSepolia } from "../services/blockchain";
 import {
   STAKEHOLDERS,
   getAllStakeholders,
@@ -36,6 +36,10 @@ export function WalletProvider({ children }) {
   const [chainId, setChainId] = useState(null);
   const [connecting, setConnecting] = useState(false);
   const [useMetaMaskSigner, setUseMetaMaskSigner] = useState(false);
+  const [onChainRole, setOnChainRole] = useState(null);
+  const [onChainRoleName, setOnChainRoleName] = useState("");
+  const [loadingOnChainRole, setLoadingOnChainRole] = useState(false);
+  const [onChainRoleError, setOnChainRoleError] = useState("");
 
   // Synchronize user to sessionStorage
   useEffect(() => {
@@ -218,14 +222,43 @@ export function WalletProvider({ children }) {
     setUseMetaMaskSigner(false);
   }
 
+  // Role reading directly from the deployed Sepolia smart contract
+  async function refreshOnChainRole(targetAddr) {
+    const addr = targetAddr || metaMaskAddress;
+    if (!addr) {
+      setOnChainRole(null);
+      setOnChainRoleName("");
+      setOnChainRoleError("");
+      return null;
+    }
+    try {
+      setLoadingOnChainRole(true);
+      setOnChainRoleError("");
+      const roleNum = await getWalletRole(addr);
+      setOnChainRole(roleNum);
+      setOnChainRoleName(ROLE_NAMES[roleNum] || "Unknown");
+      return roleNum;
+    } catch (err) {
+      console.warn("[WalletContext] Failed to read on-chain role:", err.message);
+      setOnChainRoleError(err.message);
+      return null;
+    } finally {
+      setLoadingOnChainRole(false);
+    }
+  }
+
   // MetaMask integration
   async function refreshMetaMask() {
     if (!window.ethereum) return;
     try {
       const accounts = await window.ethereum.request({ method: "eth_accounts" });
       const chain = await window.ethereum.request({ method: "eth_chainId" });
-      setMetaMaskAddress(accounts[0] || "");
+      const addr = accounts[0] || "";
+      setMetaMaskAddress(addr);
       setChainId(parseInt(chain, 16));
+      if (addr) {
+        refreshOnChainRole(addr);
+      }
     } catch (_) {}
   }
 
@@ -237,6 +270,9 @@ export function WalletProvider({ children }) {
       setUseMetaMaskSigner(true);
       const chain = await window.ethereum.request({ method: "eth_chainId" });
       setChainId(parseInt(chain, 16));
+      if (account) {
+        await refreshOnChainRole(account);
+      }
     } finally {
       setConnecting(false);
     }
@@ -247,10 +283,21 @@ export function WalletProvider({ children }) {
     if (!window.ethereum) return;
 
     const accountsChanged = (accs) => {
-      setMetaMaskAddress(accs[0] || "");
+      const newAddr = accs[0] || "";
+      setMetaMaskAddress(newAddr);
+      if (newAddr) {
+        refreshOnChainRole(newAddr);
+      } else {
+        setOnChainRole(null);
+        setOnChainRoleName("");
+      }
     };
     const chainChanged = (c) => {
-      setChainId(parseInt(c, 16));
+      const newChain = parseInt(c, 16);
+      setChainId(newChain);
+      if (metaMaskAddress) {
+        refreshOnChainRole(metaMaskAddress);
+      }
     };
 
     window.ethereum.on("accountsChanged", accountsChanged);
@@ -260,7 +307,7 @@ export function WalletProvider({ children }) {
       window.ethereum.removeListener("accountsChanged", accountsChanged);
       window.ethereum.removeListener("chainChanged", chainChanged);
     };
-  }, []);
+  }, [metaMaskAddress]);
 
   // Effective active address
   const activeAddress = useMetaMaskSigner && metaMaskAddress
@@ -289,6 +336,13 @@ export function WalletProvider({ children }) {
       useMetaMaskSigner,
       setUseMetaMaskSigner,
       hasMetaMask: Boolean(typeof window !== "undefined" && window.ethereum),
+      onChainRole,
+      onChainRoleName,
+      loadingOnChainRole,
+      onChainRoleError,
+      refreshOnChainRole,
+      switchToSepolia,
+      ROLE_NAMES,
       allStakeholders: stakeholdersList,
       resolveStakeholder,
       refreshStakeholders,

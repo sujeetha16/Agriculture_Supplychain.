@@ -114,12 +114,23 @@ export async function getSignerAndContract() {
   return { signer, contract };
 }
 
+export const ROLE_NAMES = {
+  0: "Unregistered",
+  1: "Farmer",
+  2: "Distributor",
+  3: "Retailer",
+  4: "Consumer"
+};
+
 export async function getReadOnlyContract() {
   const address = contractAddress();
   if (window.ethereum) {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
-      return new ethers.Contract(address, contractJson.abi, provider);
+      const network = await provider.getNetwork();
+      if (Number(network.chainId) === SEPOLIA_CHAIN_ID) {
+        return new ethers.Contract(address, contractJson.abi, provider);
+      }
     } catch (_) {}
   }
 
@@ -140,12 +151,61 @@ export async function getReadOnlyContract() {
   throw new Error("Unable to establish connection to Sepolia RPC.");
 }
 
+export async function getWalletRole(walletAddress) {
+  if (!walletAddress) return 0;
+  try {
+    const contract = await getReadOnlyContract();
+    const role = await contract.getRole(walletAddress);
+    return Number(role);
+  } catch (error) {
+    console.warn(`[getWalletRole] Error querying role for ${walletAddress}:`, error.message);
+    throw normalizeBlockchainError(error);
+  }
+}
+
 export async function registerRole(roleNumber) {
   try {
-    const { contract } = await getSignerAndContract();
-    const tx = await contract.registerRole(roleNumber);
+    const num = Number(roleNumber);
+    if (![1, 2, 3, 4].includes(num)) {
+      throw new Error("Invalid role selected. Must be Farmer (1), Distributor (2), Retailer (3), or Consumer (4).");
+    }
+
+    const { signer, contract } = await getSignerAndContract();
+    const signerAddress = await signer.getAddress();
+
+    // Verify current role before sending transaction to prevent unnecessary reverts and gas loss
+    const currentRole = await contract.getRole(signerAddress);
+    const roleNum = Number(currentRole);
+    if (roleNum !== 0) {
+      const existingRole = ROLE_NAMES[roleNum] || `Role ${roleNum}`;
+      throw new Error(`Wallet ${signerAddress} is already registered on-chain as ${existingRole}. The AgriChain contract permanently enforces one role per address.`);
+    }
+
+    // Supply a safely buffered gas limit to prevent out-of-gas reverts,
+    // especially for EIP-7702 delegated accounts (MetaMask smart accounts).
+    let gasLimit = 600000n;
+    try {
+      const estimated = await contract.registerRole.estimateGas(num);
+      const buffered = (estimated * 150n) / 100n;
+      gasLimit = buffered > 500000n ? buffered : 500000n;
+    } catch (_) {
+      gasLimit = 600000n;
+    }
+
+    const tx = await contract.registerRole(num, { gasLimit });
     const receipt = await tx.wait();
-    return { hash: receipt.hash || tx.hash, receipt };
+
+    if (!receipt || receipt.status === 0) {
+      throw new Error("Role registration transaction was reverted on the blockchain.");
+    }
+
+    return {
+      hash: receipt.hash || tx.hash,
+      receipt,
+      role: num,
+      roleName: ROLE_NAMES[num],
+      address: signerAddress
+    };
   } catch (error) {
     throw normalizeBlockchainError(error);
   }
@@ -153,11 +213,45 @@ export async function registerRole(roleNumber) {
 
 export async function createProductOnChain(name, harvestDate) {
   try {
-    const { contract } = await getSignerAndContract();
-    const tx = await contract.createProduct(name, harvestDate);
+    const { signer, contract } = await getSignerAndContract();
+    const signerAddress = await signer.getAddress();
+
+    // Read signer's actual role directly from the smart contract before submitting
+    const currentRole = await contract.getRole(signerAddress);
+    const roleNum = Number(currentRole);
+
+    if (roleNum !== 1) {
+      if (roleNum === 0) {
+        throw new Error(
+          `Connected wallet (${signerAddress}) is not registered on the smart contract. Please register the Farmer role (Role 1) on the Register Role page before creating agricultural products.`
+        );
+      } else {
+        const actualRoleName = ROLE_NAMES[roleNum] || `Role ${roleNum}`;
+        throw new Error(
+          `Connected wallet (${signerAddress}) has on-chain role "${actualRoleName}". The smart contract requires the Farmer role (Role 1) to execute createProduct(). Please switch to a registered Farmer wallet.`
+        );
+      }
+    }
+
+    // createProduct writes a 14-field struct into multiple storage slots (~616k base gas).
+    // Supply a safely buffered gas limit (min 850,000 gas) for EIP-7702 delegation overhead.
+    let gasLimit = 900000n;
+    try {
+      const estimated = await contract.createProduct.estimateGas(name, harvestDate);
+      const buffered = (estimated * 140n) / 100n;
+      gasLimit = buffered > 850000n ? buffered : 850000n;
+    } catch (_) {
+      gasLimit = 900000n;
+    }
+
+    const tx = await contract.createProduct(name, harvestDate, { gasLimit });
     const receipt = await tx.wait();
 
-    let productId;
+    if (!receipt || receipt.status === 0) {
+      throw new Error("Product creation transaction was reverted on the blockchain.");
+    }
+
+    let productId = null;
     for (const log of receipt.logs) {
       try {
         const parsed = contract.interface.parseLog(log);
@@ -169,11 +263,15 @@ export async function createProductOnChain(name, harvestDate) {
     }
 
     if (!productId) {
-      // Fallback: derive ID from next available or timestamp
-      productId = Date.now() % 100000;
+      throw new Error("Transaction confirmed on Sepolia, but the ProductCreated event was not emitted by the smart contract.");
     }
 
-    return { hash: receipt.hash || tx.hash, receipt, productId };
+    return {
+      hash: receipt.hash || tx.hash,
+      receipt,
+      productId,
+      signerAddress
+    };
   } catch (error) {
     throw normalizeBlockchainError(error);
   }
@@ -260,15 +358,30 @@ export async function getOnChainProduct(productId) {
   }
 }
 
-function normalizeBlockchainError(error) {
+export function normalizeBlockchainError(error) {
   if (error?.code === 4001 || error?.code === "ACTION_REJECTED") {
     return new Error("Transaction rejected in MetaMask.");
   }
+
+  const rawMessage = error?.data?.message || error?.error?.message || error?.reason || error?.shortMessage || error?.message || "";
+  
+  if (rawMessage.includes("Caller does not have required role")) {
+    return new Error('Smart contract execution reverted: "Caller does not have required role". Connected wallet must be registered as a Farmer on the AgriChain Sepolia smart contract.');
+  }
+
+  if (rawMessage.includes("Role already registered")) {
+    return new Error('Smart contract execution reverted: "Role already registered". This wallet is already permanently registered on-chain.');
+  }
+
+  if (rawMessage.includes("Invalid role")) {
+    return new Error('Smart contract execution reverted: "Invalid role". Must be Farmer (1), Distributor (2), Retailer (3), or Consumer (4).');
+  }
+
   if (error?.shortMessage) {
     return new Error(error.shortMessage);
   }
   if (error?.reason) {
     return new Error(error.reason);
   }
-  return new Error(error?.message || "Blockchain transaction failed.");
+  return new Error(rawMessage || "Blockchain transaction failed.");
 }

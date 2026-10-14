@@ -39,30 +39,92 @@ describe("AgriChain Smart Contract Lifecycle & Access Control Suite", function (
   });
 
   describe("1. Role Registration & Access Control", function () {
-    it("should allow accounts to register legitimate roles and emit RoleRegistered", async function () {
-      const role = await agriChain.getRole(farmer.address);
-      expect(role).to.equal(Role.Farmer);
+    it("should return Role.None (0) for an unregistered wallet address", async function () {
+      const roleFromGetter = await agriChain.getRole(outsider.address);
+      const roleFromMapping = await agriChain.roles(outsider.address);
+      expect(roleFromGetter).to.equal(Role.None);
+      expect(roleFromMapping).to.equal(Role.None);
     });
 
-    it("should revert if an account attempts to register Role.None", async function () {
+    it("should correctly record and return registered roles via getRole() and roles()", async function () {
+      expect(await agriChain.getRole(farmer.address)).to.equal(Role.Farmer);
+      expect(await agriChain.roles(farmer.address)).to.equal(Role.Farmer);
+
+      expect(await agriChain.getRole(distributor.address)).to.equal(Role.Distributor);
+      expect(await agriChain.roles(distributor.address)).to.equal(Role.Distributor);
+
+      expect(await agriChain.getRole(retailer.address)).to.equal(Role.Retailer);
+      expect(await agriChain.roles(retailer.address)).to.equal(Role.Retailer);
+
+      expect(await agriChain.getRole(consumer.address)).to.equal(Role.Consumer);
+      expect(await agriChain.roles(consumer.address)).to.equal(Role.Consumer);
+    });
+
+    it("should allow an unregistered account to register Role.Farmer and emit RoleRegistered event", async function () {
+      const [, , , , , , freshWallet] = await ethers.getSigners();
+      await expect(agriChain.connect(freshWallet).registerRole(Role.Farmer))
+        .to.emit(agriChain, "RoleRegistered")
+        .withArgs(freshWallet.address, Role.Farmer);
+
+      expect(await agriChain.getRole(freshWallet.address)).to.equal(Role.Farmer);
+    });
+
+    it("should allow accounts to register Distributor, Retailer, and Consumer roles", async function () {
+      const [, , , , , , , w1, w2, w3] = await ethers.getSigners();
+      await expect(agriChain.connect(w1).registerRole(Role.Distributor))
+        .to.emit(agriChain, "RoleRegistered")
+        .withArgs(w1.address, Role.Distributor);
+
+      await expect(agriChain.connect(w2).registerRole(Role.Retailer))
+        .to.emit(agriChain, "RoleRegistered")
+        .withArgs(w2.address, Role.Retailer);
+
+      await expect(agriChain.connect(w3).registerRole(Role.Consumer))
+        .to.emit(agriChain, "RoleRegistered")
+        .withArgs(w3.address, Role.Consumer);
+    });
+
+    it("should revert if an account attempts to register Role.None (0)", async function () {
       await expect(
         agriChain.connect(outsider).registerRole(Role.None)
       ).to.be.revertedWith("Invalid role");
     });
 
-    it("should revert if an account attempts to register a second role (immutable identity)", async function () {
+    it("should revert duplicate registration attempts (immutable identity enforcement)", async function () {
+      // Re-registering different role
       await expect(
         agriChain.connect(farmer).registerRole(Role.Distributor)
+      ).to.be.revertedWith("Role already registered");
+
+      // Re-registering the exact same role
+      await expect(
+        agriChain.connect(farmer).registerRole(Role.Farmer)
+      ).to.be.revertedWith("Role already registered");
+
+      await expect(
+        agriChain.connect(distributor).registerRole(Role.Distributor)
+      ).to.be.revertedWith("Role already registered");
+
+      await expect(
+        agriChain.connect(retailer).registerRole(Role.Farmer)
+      ).to.be.revertedWith("Role already registered");
+
+      await expect(
+        agriChain.connect(consumer).registerRole(Role.Farmer)
       ).to.be.revertedWith("Role already registered");
     });
   });
 
-  describe("2. Product Creation", function () {
+  describe("2. Product Creation & Access Control Verification", function () {
     it("should allow an authorized Farmer to create a crop batch and emit ProductCreated", async function () {
       const tx = await agriChain
         .connect(farmer)
         .createProduct("Organic Honeycrisp Apples", "2026-10-10");
       const receipt = await tx.wait();
+
+      await expect(tx)
+        .to.emit(agriChain, "ProductCreated")
+        .withArgs(1n, "Organic Honeycrisp Apples", "2026-10-10", farmer.address, (t) => t > 0);
 
       const product = await agriChain.getProduct(1);
       expect(product.id).to.equal(1n);
@@ -73,13 +135,36 @@ describe("AgriChain Smart Contract Lifecycle & Access Control Suite", function (
       expect(product.exists).to.be.true;
     });
 
-    it("should prevent non-farmers from creating agricultural products", async function () {
-      await expect(
-        agriChain.connect(distributor).createProduct("Rogue Grain Batch", "2026-10-10")
-      ).to.be.revertedWith("Caller does not have required role");
+    it("should revert with 'Caller does not have required role' when unregistered account calls createProduct()", async function () {
+      // Outsider has Role.None (0)
+      expect(await agriChain.getRole(outsider.address)).to.equal(Role.None);
 
       await expect(
         agriChain.connect(outsider).createProduct("Unregistered Batch", "2026-10-10")
+      ).to.be.revertedWith("Caller does not have required role");
+    });
+
+    it("should revert with 'Caller does not have required role' when Distributor calls createProduct()", async function () {
+      expect(await agriChain.getRole(distributor.address)).to.equal(Role.Distributor);
+
+      await expect(
+        agriChain.connect(distributor).createProduct("Distributor Product", "2026-10-10")
+      ).to.be.revertedWith("Caller does not have required role");
+    });
+
+    it("should revert with 'Caller does not have required role' when Retailer calls createProduct()", async function () {
+      expect(await agriChain.getRole(retailer.address)).to.equal(Role.Retailer);
+
+      await expect(
+        agriChain.connect(retailer).createProduct("Retailer Product", "2026-10-10")
+      ).to.be.revertedWith("Caller does not have required role");
+    });
+
+    it("should revert with 'Caller does not have required role' when Consumer calls createProduct()", async function () {
+      expect(await agriChain.getRole(consumer.address)).to.equal(Role.Consumer);
+
+      await expect(
+        agriChain.connect(consumer).createProduct("Consumer Product", "2026-10-10")
       ).to.be.revertedWith("Caller does not have required role");
     });
 

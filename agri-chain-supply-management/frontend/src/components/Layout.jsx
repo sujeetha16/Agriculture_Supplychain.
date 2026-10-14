@@ -14,7 +14,10 @@ export default function Layout({ children }) {
     useMetaMaskSigner,
     setUseMetaMaskSigner,
     connectMetaMask,
-    hasMetaMask
+    hasMetaMask,
+    metaMaskAddress,
+    onChainRole,
+    onChainRoleName
   } = useWallet();
 
   const navigate = useNavigate();
@@ -80,6 +83,27 @@ export default function Layout({ children }) {
                 {useMetaMaskSigner ? "Disconnect MetaMask" : "Connect MetaMask (Sepolia)"}
               </button>
             )}
+
+            {useMetaMaskSigner && metaMaskAddress && (
+              <div className="d-flex align-items-center gap-1 ms-2">
+                <span className="badge bg-primary bg-opacity-25 text-white border border-primary-subtle font-monospace small">
+                  {metaMaskAddress.slice(0, 6)}...{metaMaskAddress.slice(-4)}
+                </span>
+                {onChainRole === 0 ? (
+                  <Link
+                    to="/register-role"
+                    className="badge bg-warning text-dark text-decoration-none"
+                    title="Wallet is not registered on smart contract. Click to register."
+                  >
+                    <i className="bi bi-exclamation-circle-fill me-1"></i>Unregistered
+                  </Link>
+                ) : onChainRole ? (
+                  <span className="badge bg-success">
+                    <i className="bi bi-patch-check-fill me-1"></i>{onChainRoleName}
+                  </span>
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -110,6 +134,9 @@ export default function Layout({ children }) {
               </NavLink>
               <NavLink className="nav-link" to="/farmer/add">
                 <i className="bi bi-plus-circle me-1"></i>Register Batch
+              </NavLink>
+              <NavLink className="nav-link" to="/register-role">
+                <i className="bi bi-person-badge me-1"></i>Register Role
               </NavLink>
               <NavLink className="nav-link" to="/trace">
                 <i className="bi bi-search me-1"></i>Trace & Verify
@@ -156,6 +183,11 @@ export default function Layout({ children }) {
                       </li>
                     ))}
                     <li><hr className="dropdown-divider" /></li>
+                    <li>
+                      <Link className="dropdown-item small" to="/register-role">
+                        <i className="bi bi-person-badge me-2 text-success"></i>Smart Contract Role Registration
+                      </Link>
+                    </li>
                     <li>
                       <Link className="dropdown-item small" to="/login">
                         <i className="bi bi-shield-lock me-2 text-primary"></i>Login / Switch Credentials

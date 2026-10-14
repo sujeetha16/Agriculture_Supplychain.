@@ -17,7 +17,7 @@
       "GlobalG.A.P.",
       "Non-GMO"
     ],
-    "password": "$2b$10$fSa6zplKDMg/l2aU8vNEJuK8LtP3tXMBaOxVhgXKlnLZP1BNWBqOK"
+    "password": "$2b$10$gT/gdoSCZ/hxuIKWDGaTC.X6DNTx.kEA0M5ClrPcPdjtrLh8Gdyni"
   },
   {
     "id": "user-distributor",
@@ -36,7 +36,7 @@
       "HACCP Certified",
       "ISO 22000 Cold Chain"
     ],
-    "password": "$2b$10$XjthNUl4ZWpsguZbdn5t0OM2.m2gv6uJWEClvv212GtxQikb0DTEK"
+    "password": "$2b$10$wXzxRkmhjy.lc1KRBhI7XuXLbaHn110fkuYlevZ8uEx0GRjT3Z74e"
   },
   {
     "id": "user-retailer",
@@ -55,7 +55,7 @@
       "Certified Organic Retailer",
       "Fair Trade Partner"
     ],
-    "password": "$2b$10$.VY7SRoCwwGryy9SzqRVIec1u/2mQq3o2l.4JuQ.p1hSL4hEjWzAm"
+    "password": "$2b$10$Al/GUtMIBS7CKE2LkhpOie9x9Q8EgruHmtpQ/n3mMGmrPd4PAGRlK"
   },
   {
     "id": "user-consumer",
@@ -73,6 +73,6 @@
     "verifiedCertifications": [
       "Eco-Shopper Verified"
     ],
-    "password": "$2b$10$3ynPH.ArruV6h02Gz0ZZxOBDmdigmAbfXoahX4HYTzMxf9NRJ.jjm"
+    "password": "$2b$10$NwS2kQR/5G8kOtfg89n9B.dYkeez1gB82YSaXJtInJ8/O8QZeo9AS"
   }
 ]

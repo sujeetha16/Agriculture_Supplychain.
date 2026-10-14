@@ -756,4 +756,55 @@ describe("Blockchain Verification Correctness & Regression Suite (15 Critical Sc
     assert.ok(cfnTemplate.includes("Backend5xxErrorsAlarm:"));
     assert.ok(cfnTemplate.includes("DependsOn: BackendAppRunnerService"));
   });
+
+  test("26. Frontend AgriChain ABI matches compiled Hardhat contract interface perfectly", () => {
+    const frontendAbiPath = path.join(__dirname, "../../frontend/src/contracts/AgriChain.json");
+    const hardhatAbiPath = path.join(__dirname, "../../blockchain/artifacts/contracts/AgriChain.sol/AgriChain.json");
+
+    assert.ok(fs.existsSync(frontendAbiPath), "Frontend AgriChain.json must exist");
+    assert.ok(fs.existsSync(hardhatAbiPath), "Hardhat AgriChain.json artifact must exist");
+
+    const frontendArtifact = JSON.parse(fs.readFileSync(frontendAbiPath, "utf-8"));
+    const hardhatArtifact = JSON.parse(fs.readFileSync(hardhatAbiPath, "utf-8"));
+
+    const frontendAbiNames = frontendArtifact.abi.map((item) => item.name || item.type).sort();
+    const hardhatAbiNames = hardhatArtifact.abi.map((item) => item.name || item.type).sort();
+
+    assert.deepStrictEqual(
+      frontendAbiNames,
+      hardhatAbiNames,
+      "Frontend ABI functions and events must exactly match Hardhat compiled contract ABI"
+    );
+  });
+
+  test("27. Contract ABI strictly exposes getRole, roles, registerRole, and createProduct with correct mutability", () => {
+    const frontendAbiPath = path.join(__dirname, "../../frontend/src/contracts/AgriChain.json");
+    const frontendArtifact = JSON.parse(fs.readFileSync(frontendAbiPath, "utf-8"));
+
+    const getRoleFn = frontendArtifact.abi.find((x) => x.name === "getRole");
+    assert.ok(getRoleFn, "getRole() function must be present in ABI");
+    assert.strictEqual(getRoleFn.stateMutability, "view", "getRole must be a view function");
+    assert.strictEqual(getRoleFn.inputs[0].type, "address");
+    assert.strictEqual(getRoleFn.outputs[0].type, "uint8");
+
+    const rolesMapping = frontendArtifact.abi.find((x) => x.name === "roles");
+    assert.ok(rolesMapping, "roles mapping getter must be present in ABI");
+    assert.strictEqual(rolesMapping.stateMutability, "view", "roles must be a view function");
+    assert.strictEqual(rolesMapping.inputs[0].type, "address");
+    assert.strictEqual(rolesMapping.outputs[0].type, "uint8");
+
+    const registerRoleFn = frontendArtifact.abi.find((x) => x.name === "registerRole");
+    assert.ok(registerRoleFn, "registerRole() function must be present in ABI");
+    assert.strictEqual(registerRoleFn.stateMutability, "nonpayable");
+    assert.strictEqual(registerRoleFn.inputs[0].type, "uint8");
+
+    const createProductFn = frontendArtifact.abi.find((x) => x.name === "createProduct");
+    assert.ok(createProductFn, "createProduct() function must be present in ABI");
+    assert.strictEqual(createProductFn.stateMutability, "nonpayable");
+    assert.strictEqual(createProductFn.outputs[0].type, "uint256");
+
+    const roleRegisteredEvent = frontendArtifact.abi.find((x) => x.name === "RoleRegistered");
+    assert.ok(roleRegisteredEvent, "RoleRegistered event must be present in ABI");
+    assert.strictEqual(roleRegisteredEvent.type, "event");
+  });
 });
