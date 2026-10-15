@@ -130,7 +130,8 @@ export default function FarmerAddProduct() {
         estimatedShelfLife: form.estimatedShelfLife,
         notes: form.notes,
         farmer: farmerSignerAddress,
-        txHash
+        txHash,
+        isDemoMode: !isMetaMaskActive
       });
 
       setCreatedProductId(finalProductId);

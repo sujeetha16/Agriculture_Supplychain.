@@ -127,6 +127,21 @@ function requireWalletMatch(walletParamName = "actorAddress") {
     const expectedWallet = req.body[walletParamName] || req.body.farmer;
     if (expectedWallet && req.user.walletAddress) {
       if (req.user.walletAddress.toLowerCase() !== expectedWallet.toLowerCase()) {
+        // Pre-seeded demo stakeholder addresses from seed datastore
+        const DEMO_SEED_WALLETS = [
+          "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+          "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+          "0x9965507d1a55bcc2695c58ba16fb37d819b0a4df",
+          "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+        ];
+        const isDemoSeedAccount = DEMO_SEED_WALLETS.includes(req.user.walletAddress.toLowerCase());
+
+        // In non-production environments, allow MetaMask transactions executed by demo users;
+        // downstream verifyTransaction verifies the actual signer address on Ethereum Sepolia.
+        if (!IS_PRODUCTION && (isDemoSeedAccount || req.user.isDemo)) {
+          return next();
+        }
+
         return res.status(403).json({
           success: false,
           message: `Actor wallet mismatch: Logged in wallet (${req.user.walletAddress}) cannot transact on behalf of (${expectedWallet}).`

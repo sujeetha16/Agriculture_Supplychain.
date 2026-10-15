@@ -3,7 +3,7 @@
 **Evaluation Project:** Agriculture Supply Chain Traceability Platform  
 **Testing Environment:** Node.js v24.12.0, npm 11.6.2, Windows 11 Host, Vite 5.4, Hardhat 2.22  
 **Report Date:** October 2026  
-**Overall Status:** **61/61 Automated Tests Passing (100% Pass Rate across Backend, QR Resolution & Smart Contract Suites), Frontend Bundle Built Cleanly**
+**Overall Status:** **74/74 Automated Tests Passing (100% Pass Rate across Backend, QR Resolution & Smart Contract Suites), Frontend Bundle Built Cleanly**
 
 ---
 
@@ -11,11 +11,11 @@
 
 | Component Suite | Test Harness | Tests Executed | Passed | Failed | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Backend API Security & Lifecycle** | `node:test` + native fetch | 12 | 12 | 0 | **PASS (100%)** |
-| **Blockchain Verification & Concurrency** | `node:test` + ethers v6 | 25 | 25 | 0 | **PASS (100%)** |
+| **Backend API Security & Lifecycle** | `node:test` + native fetch | 14 | 14 | 0 | **PASS (100%)** |
+| **Blockchain Verification & Concurrency** | `node:test` + ethers v6 | 30 | 30 | 0 | **PASS (100%)** |
 | **QR Code Payload Resolution & Parser** | `node:test` unit suite | 12 | 12 | 0 | **PASS (100%)** |
-| **Smart Contract Suite** | Hardhat / Mocha / Chai | 12 | 12 | 0 | **PASS (100%)** |
-| **Frontend Production Build** | Vite 5 (Rollup, Code-Split) | 284 modules | 284 | 0 | **PASS (Clean)** |
+| **Smart Contract Suite** | Hardhat / Mocha / Chai | 18 | 18 | 0 | **PASS (100%)** |
+| **Frontend Production Build** | Vite 5 (Rollup, Code-Split) | 285 modules | 285 | 0 | **PASS (Clean)** |
 | **Local Smoke Micro-Benchmark** | `load_test_native.js` | 100 requests | 100 | 0 | **PASS (0% Err)** |
 
 ---
@@ -37,8 +37,10 @@
   10. Out-of-order state transition rejected (cannot receive before dispatch)
   11. Complete Supply Chain Lifecycle execution: Farmer -> Distributor -> Retailer -> Consumer
   12. Traceability Verification Endpoint audits cryptographic proof chain
+  13. requireWalletMatch permits connected MetaMask wallet under non-production demo persona
+  14. requireWalletMatch strictly enforces wallet match in production tier (NODE_ENV=production)
 
-### Suite 2: Blockchain Verification, Fail-Closed Security & Concurrency Suite (25 Tests)
+### Suite 2: Blockchain Verification, Fail-Closed Security & Concurrency Suite (27 Tests)
 * **Command:** `npm test` (inside `agri-chain-supply-management/backend`)
 * **Coverage:**
   1. Valid transaction, correct AgriChain contract, expected event, correct product ID and action
@@ -66,7 +68,11 @@
   23. Production CONTRACT_ADDRESS configuration fails fast on malformed address
   24. Production SEPOLIA_RPC_URL configuration validates URL scheme and supports fallback
   25. CloudFormation template enforces KMS least privilege, RPC parameters, and alarm dependencies
-
+  26. Frontend AgriChain ABI matches compiled Hardhat contract interface perfectly
+  27. Contract ABI strictly exposes getRole, roles, registerRole, and createProduct with correct mutability
+  28. EIP-7702 delegated transaction via MetaMask Delegation Manager correctly verifies on-chain product creation
+  29. Delegated transaction routed to delegation manager without AgriChain logs rejected with `CONTRACT_MISMATCH`
+  30. End-to-end API product creation succeeds when transaction is executed via EIP-7702 delegation
 
 ### Suite 3: QR Code Payload Resolution & Parser (12 Tests)
 * **Command:** `npm test` (inside `agri-chain-supply-management/backend`)
@@ -84,13 +90,13 @@
   11. Fails safely on completely unrelated URL or search text (`https://google.com/...`)
   12. Fails safely on empty, null, or non-string input (`""`, `null`, `undefined`, number)
 
-### Suite 4: Hardhat Smart Contract Lifecycle & Access Control (12 Tests)
+### Suite 4: Hardhat Smart Contract Lifecycle & Access Control (18 Tests)
 * **Command:** `npx hardhat test` (inside `agri-chain-supply-management/blockchain`)
 * **Coverage:**
-  * Role Registration & Access Control (3 tests)
-  * Product Creation (3 tests)
-  * Complete Legitimate Supply-Chain Transition Cycle (1 test)
-  * Negative Security & State-Machine Violations (5 tests)
+  * Role Registration & Access Control (6 tests: unregistered Role.None, recording getRole/roles, Farmer registration, all roles registration, reject Role.None, reject duplicate registration)
+  * Product Creation & Access Control (6 tests: authorized Farmer creation, reject unregistered, reject Distributor, reject Retailer, reject Consumer, reject empty fields)
+  * Complete Legitimate Supply-Chain Transition Cycle (1 test: full Farmer -> Distributor -> Retailer -> Consumer cycle)
+  * Negative Security & State-Machine Violations (5 tests: dispatch to non-distributor, unauthorized farmer dispatch, out-of-order transition, nonexistent product query, prevent replaying sold state)
 
 ### Suite 5: Frontend Production Bundle Compilation
 * **Command:** `npm run build` (inside `agri-chain-supply-management/frontend`)

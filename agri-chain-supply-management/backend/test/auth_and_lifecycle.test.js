@@ -356,4 +356,52 @@ describe("Backend API Security, Authentication & Lifecycle Suite", () => {
     assert.strictEqual(body.creationVerification.status, "SIMULATED_DEMO");
     assert.strictEqual(body.historyVerifications.length, 6);
   });
+
+  test("13. requireWalletMatch permits connected MetaMask wallet under non-production demo persona", async () => {
+    const externalMetaMaskWallet = "0x96507b39b2a3291687f8dd3a39f8162c3668f08f";
+    // Submitting with demo farmer token and custom external MetaMask wallet in dev/demo mode
+    const res = await fetch(`${baseUrl}/api/products`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${farmerToken}`
+      },
+      body: JSON.stringify({
+        productId: 7711,
+        name: "MetaMask Linked Apples",
+        harvestDate: "2026-10-14",
+        farmer: externalMetaMaskWallet,
+        txHash: "0xsim-metamask-demo-001",
+        isDemoMode: true
+      })
+    });
+    assert.strictEqual(res.status, 201);
+    const data = await res.json();
+    assert.strictEqual(data.success, true);
+    assert.strictEqual(data.product.farmer, externalMetaMaskWallet);
+  });
+
+  test("14. requireWalletMatch strictly enforces wallet match in production tier (NODE_ENV=production)", () => {
+    const { requireWalletMatch } = require("../middleware/auth");
+    const middleware = requireWalletMatch("farmer");
+
+    // Mock non-demo user with custom registered wallet in production
+    const req = {
+      user: { id: "prod-user-1", username: "prodfarmer", role: 1, walletAddress: "0x1111111111111111111111111111111111111111" },
+      body: { farmer: "0x2222222222222222222222222222222222222222" }
+    };
+    let statusCode = null;
+    let jsonBody = null;
+    const res = {
+      status: (code) => { statusCode = code; return res; },
+      json: (payload) => { jsonBody = payload; }
+    };
+    let nextCalled = false;
+    const next = () => { nextCalled = true; };
+
+    middleware(req, res, next);
+    assert.strictEqual(statusCode, 403);
+    assert.strictEqual(nextCalled, false);
+    assert.match(jsonBody.message, /Actor wallet mismatch/);
+  });
 });

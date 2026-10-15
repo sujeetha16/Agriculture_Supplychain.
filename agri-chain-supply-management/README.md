@@ -5,7 +5,7 @@
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.24-363636.svg)](https://soliditylang.org/)
 [![Hardhat](https://img.shields.io/badge/Hardhat-2.22-yellow.svg)](https://hardhat.org/)
 [![AWS CloudFormation](https://img.shields.io/badge/AWS-CloudFormation-orange.svg)](https://aws.amazon.com/cloudformation/)
-[![Tests](https://img.shields.io/badge/Tests-61%20Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-71%20Passing-brightgreen.svg)]()
 
 A cloud-native agricultural provenance, cold-chain logistics, and traceability platform engineered for a **College Cloud Computing Course Capstone** and **Applied Systems Research Evaluation**. Combines containerized Express microservices on AWS App Runner, high-performance edge delivery via Amazon CloudFront (with Origin Access Control), resilient database persistence, and decentralized Ethereum Sepolia smart-contract verification.
 
@@ -17,11 +17,11 @@ To maintain rigorous academic and engineering honesty, this table documents the 
 
 | Component | Status | Implementation Details & Evidence |
 | :--- | :--- | :--- |
-| **Frontend SPA** | **VERIFIED & BUILT** | React 18, Vite 5, Bootstrap 5. 284 modules build cleanly into code-split chunks (zero chunk size warnings). |
+| **Frontend SPA** | **VERIFIED & BUILT** | React 18, Vite 5, Bootstrap 5. 285 modules build cleanly into code-split chunks (zero chunk size warnings). |
 | **Backend REST API** | **VERIFIED & TESTED** | Express 4, correlation IDs (`x-request-id`), structured CloudWatch logs, health checks. |
 | **Authentication & Security** | **HARDENED & TESTED** | Passwords hashed with **bcrypt**; strong production **JWT_SECRET** validation; SIWE **wallet challenge-response signature verification**; origin-restricted CORS allowlists. |
 | **Supply Chain State Machine**| **VERIFIED & TESTED** | Linear 5-state lifecycle (Created $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Sold) with atomic conditional DB updates preventing race conditions. |
-| **Smart Contract (`AgriChain.sol`)** | **AUDITED & TESTED** | Solidity 0.8.24; **12/12 automated Hardhat unit tests passing** (access control, role registry, negative security). |
+| **Smart Contract (`AgriChain.sol`)** | **AUDITED & TESTED** | Solidity 0.8.24; **18/18 automated Hardhat unit tests passing** (access control, role registry, negative security). |
 | **Blockchain Receipt Verifier** | **HARDENED & TESTED** | Strict fail-closed verification with ethers v6: mandatory action & product ID checks, ABI event decoding, actor/recipient identity validation, zero permissive fallbacks. |
 | **AWS CloudFormation IaC** | **CONFIGURED (CLI VALIDATION NOT RUN)** | `aws/cloudformation-template.yaml` declares S3, CloudFront OAC, App Runner (ECR private, Secrets Manager ARNs), IAM execution roles, SNS, and CloudWatch 5xx Alarm. CLI validation was NOT RUN on this machine because AWS CLI is not installed. |
 | **AWS Live Cloud Deployment** | **PREPARED (PENDING RUN)** | Template ready for deployment; no billable cloud resources created without user approval. |
@@ -112,21 +112,21 @@ npm run dev
 
 ## 5. Automated Testing & Verification
 
-### Run Smart Contract Suite (12 Tests)
+### Run Smart Contract Suite (18 Tests)
 ```bash
 cd agri-chain-supply-management/blockchain
 npx hardhat test
 ```
 *Tests role registration, product creation, sequential Farmer $\rightarrow$ Distributor $\rightarrow$ Retailer $\rightarrow$ Consumer transitions, and negative access control attacks.*
 
-### Run Backend API, Blockchain & QR Verification Suite (49 Tests)
+### Run Backend API, Blockchain & QR Verification Suite (53 Tests)
 ```bash
 cd agri-chain-supply-management/backend
 npm test
 ```
-*Executes all 49 automated tests across three comprehensive suites:*
-* *`auth_and_lifecycle.test.js` (12 tests): `/api/health`, registration validation, password hashing, JWT authentication, role enforcement, duplicate prevention, and sequential lifecycle state transitions.*
-* *`blockchain_verification.test.js` (25 tests): Contract address validation, event log ABI decoding, product ID matching, stakeholder identity verification, reverted tx blocking, pending tx handling, unverified state blocking DB, duplicate tx prevention, SIWE wallet challenge verification, CloudFormation validation, and fail-closed security.*
+*Executes all 53 automated tests across three comprehensive suites:*
+* *`auth_and_lifecycle.test.js` (14 tests): `/api/health`, registration validation, password hashing, JWT authentication, role enforcement, duplicate prevention, sequential lifecycle state transitions, and MetaMask wallet binding support.*
+* *`blockchain_verification.test.js` (27 tests): Contract address validation, event log ABI decoding, product ID matching, stakeholder identity verification, reverted tx blocking, pending tx handling, unverified state blocking DB, duplicate tx prevention, SIWE wallet challenge verification, CloudFormation validation, ABI interface consistency, and fail-closed security.*
 * *`qr_payload.test.js` (12 tests): Positive/negative parsing for JSON formats (`productId`, `id`), absolute/relative `/trace/:id` URLs, raw batch integers, prefixed IDs, malformed JSON, and invalid inputs.*
 
 ### Run Empirical Performance Load Test

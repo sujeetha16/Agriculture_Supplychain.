@@ -98,7 +98,8 @@ export default function ProductActions() {
         date: form.date,
         txHash,
         location: form.location,
-        notes: form.notes
+        notes: form.notes,
+        isDemoMode: !(useMetaMaskSigner && window.ethereum)
       });
 
       await load();
@@ -278,19 +279,31 @@ export default function ProductActions() {
                   {/* 1. Farmer Dispatch to Distributor */}
                   {status === "Created" && (
                     <div className="border-top pt-3">
-                      <label className="form-label small fw-semibold">Designated Cold-Chain Distributor *</label>
-                      <select
-                        className="form-select mb-3"
+                      <div className="d-flex justify-content-between align-items-center mb-1">
+                        <label className="form-label small fw-semibold mb-0">Designated Cold-Chain Distributor *</label>
+                        <span className="badge bg-light text-muted border font-monospace" style={{ fontSize: "0.7rem" }}>Role: Distributor (2)</span>
+                      </div>
+                      <input
+                        type="text"
+                        className="form-control font-monospace mb-2"
+                        placeholder="0x... (Distributor Ethereum Address)"
                         value={form.receiverAddress}
+                        disabled={busy}
                         onChange={(e) => setForm({ ...form, receiverAddress: e.target.value })}
-                      >
-                        <option value={STAKEHOLDERS[1].walletAddress}>
-                          🚚 {STAKEHOLDERS[1].name} — {STAKEHOLDERS[1].organization}
-                        </option>
-                      </select>
+                      />
+                      <div className="d-flex gap-1 flex-wrap mb-3">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary py-0 px-2"
+                          style={{ fontSize: "0.75rem" }}
+                          onClick={() => setForm({ ...form, receiverAddress: STAKEHOLDERS[1].walletAddress })}
+                        >
+                          Quick-fill Demo: {STAKEHOLDERS[1].name}
+                        </button>
+                      </div>
                       <button
                         className="btn btn-success w-100 fw-semibold"
-                        disabled={busy || !form.receiverAddress}
+                        disabled={busy || !/^0x[a-fA-F0-9]{40}$/.test(form.receiverAddress)}
                         onClick={() => perform(
                           () => dispatchToDistributor(product.productId, form.receiverAddress, form.date),
                           `/products/${product.productId}/dispatch-distributor`,
@@ -324,19 +337,31 @@ export default function ProductActions() {
                   {/* 3. Distributor Dispatch to Retailer */}
                   {status === "ReceivedByDistributor" && (
                     <div className="border-top pt-3">
-                      <label className="form-label small fw-semibold">Designated Retail Supermarket *</label>
-                      <select
-                        className="form-select mb-3"
+                      <div className="d-flex justify-content-between align-items-center mb-1">
+                        <label className="form-label small fw-semibold mb-0">Designated Retail Supermarket *</label>
+                        <span className="badge bg-light text-muted border font-monospace" style={{ fontSize: "0.7rem" }}>Role: Retailer (3)</span>
+                      </div>
+                      <input
+                        type="text"
+                        className="form-control font-monospace mb-2"
+                        placeholder="0x... (Retailer Ethereum Address)"
                         value={form.receiverAddress}
+                        disabled={busy}
                         onChange={(e) => setForm({ ...form, receiverAddress: e.target.value })}
-                      >
-                        <option value={STAKEHOLDERS[2].walletAddress}>
-                          🏪 {STAKEHOLDERS[2].name} — {STAKEHOLDERS[2].organization}
-                        </option>
-                      </select>
+                      />
+                      <div className="d-flex gap-1 flex-wrap mb-3">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary py-0 px-2"
+                          style={{ fontSize: "0.75rem" }}
+                          onClick={() => setForm({ ...form, receiverAddress: STAKEHOLDERS[2].walletAddress })}
+                        >
+                          Quick-fill Demo: {STAKEHOLDERS[2].name}
+                        </button>
+                      </div>
                       <button
                         className="btn btn-success w-100 fw-semibold"
-                        disabled={busy || !form.receiverAddress}
+                        disabled={busy || !/^0x[a-fA-F0-9]{40}$/.test(form.receiverAddress)}
                         onClick={() => perform(
                           () => dispatchToRetailer(product.productId, form.receiverAddress, form.date),
                           `/products/${product.productId}/dispatch-retailer`,
@@ -370,19 +395,31 @@ export default function ProductActions() {
                   {/* 5. Retailer Sell to Consumer */}
                   {status === "ReceivedByRetailer" && (
                     <div className="border-top pt-3">
-                      <label className="form-label small fw-semibold">Purchasing Customer / Consumer *</label>
-                      <select
-                        className="form-select mb-3"
+                      <div className="d-flex justify-content-between align-items-center mb-1">
+                        <label className="form-label small fw-semibold mb-0">Purchasing Customer / Consumer *</label>
+                        <span className="badge bg-light text-muted border font-monospace" style={{ fontSize: "0.7rem" }}>Role: Consumer (4)</span>
+                      </div>
+                      <input
+                        type="text"
+                        className="form-control font-monospace mb-2"
+                        placeholder="0x... (Consumer Ethereum Address)"
                         value={form.receiverAddress}
+                        disabled={busy}
                         onChange={(e) => setForm({ ...form, receiverAddress: e.target.value })}
-                      >
-                        <option value={STAKEHOLDERS[3].walletAddress}>
-                          👤 {STAKEHOLDERS[3].name} — {STAKEHOLDERS[3].organization}
-                        </option>
-                      </select>
+                      />
+                      <div className="d-flex gap-1 flex-wrap mb-3">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary py-0 px-2"
+                          style={{ fontSize: "0.75rem" }}
+                          onClick={() => setForm({ ...form, receiverAddress: STAKEHOLDERS[3].walletAddress })}
+                        >
+                          Quick-fill Demo: {STAKEHOLDERS[3].name}
+                        </button>
+                      </div>
                       <button
                         className="btn btn-success w-100 fw-semibold"
-                        disabled={busy || !form.receiverAddress}
+                        disabled={busy || !/^0x[a-fA-F0-9]{40}$/.test(form.receiverAddress)}
                         onClick={() => perform(
                           () => sellToConsumer(product.productId, form.receiverAddress, form.date),
                           `/products/${product.productId}/sell-consumer`,

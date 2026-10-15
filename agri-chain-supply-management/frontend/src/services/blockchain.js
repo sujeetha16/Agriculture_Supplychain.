@@ -280,8 +280,19 @@ export async function createProductOnChain(name, harvestDate) {
 export async function dispatchToDistributor(productId, distributor, date) {
   try {
     const { contract } = await getSignerAndContract();
-    const tx = await contract.dispatchToDistributor(productId, distributor, date);
+    let gasLimit = 400000n;
+    try {
+      const estimated = await contract.dispatchToDistributor.estimateGas(productId, distributor, date);
+      const buffered = (estimated * 140n) / 100n;
+      gasLimit = buffered > 350000n ? buffered : 350000n;
+    } catch (_) {
+      gasLimit = 400000n;
+    }
+    const tx = await contract.dispatchToDistributor(productId, distributor, date, { gasLimit });
     const receipt = await tx.wait();
+    if (!receipt || receipt.status === 0) {
+      throw new Error("Dispatch transaction was reverted on the blockchain.");
+    }
     return { hash: receipt.hash || tx.hash, receipt };
   } catch (error) {
     throw normalizeBlockchainError(error);
@@ -291,8 +302,19 @@ export async function dispatchToDistributor(productId, distributor, date) {
 export async function receiveFromFarmer(productId, date) {
   try {
     const { contract } = await getSignerAndContract();
-    const tx = await contract.receiveFromFarmer(productId, date);
+    let gasLimit = 350000n;
+    try {
+      const estimated = await contract.receiveFromFarmer.estimateGas(productId, date);
+      const buffered = (estimated * 140n) / 100n;
+      gasLimit = buffered > 300000n ? buffered : 300000n;
+    } catch (_) {
+      gasLimit = 350000n;
+    }
+    const tx = await contract.receiveFromFarmer(productId, date, { gasLimit });
     const receipt = await tx.wait();
+    if (!receipt || receipt.status === 0) {
+      throw new Error("Receipt acknowledgement transaction was reverted on the blockchain.");
+    }
     return { hash: receipt.hash || tx.hash, receipt };
   } catch (error) {
     throw normalizeBlockchainError(error);
@@ -302,8 +324,19 @@ export async function receiveFromFarmer(productId, date) {
 export async function dispatchToRetailer(productId, retailer, date) {
   try {
     const { contract } = await getSignerAndContract();
-    const tx = await contract.dispatchToRetailer(productId, retailer, date);
+    let gasLimit = 400000n;
+    try {
+      const estimated = await contract.dispatchToRetailer.estimateGas(productId, retailer, date);
+      const buffered = (estimated * 140n) / 100n;
+      gasLimit = buffered > 350000n ? buffered : 350000n;
+    } catch (_) {
+      gasLimit = 400000n;
+    }
+    const tx = await contract.dispatchToRetailer(productId, retailer, date, { gasLimit });
     const receipt = await tx.wait();
+    if (!receipt || receipt.status === 0) {
+      throw new Error("Retail dispatch transaction was reverted on the blockchain.");
+    }
     return { hash: receipt.hash || tx.hash, receipt };
   } catch (error) {
     throw normalizeBlockchainError(error);
@@ -313,8 +346,19 @@ export async function dispatchToRetailer(productId, retailer, date) {
 export async function receiveFromDistributor(productId, date) {
   try {
     const { contract } = await getSignerAndContract();
-    const tx = await contract.receiveFromDistributor(productId, date);
+    let gasLimit = 350000n;
+    try {
+      const estimated = await contract.receiveFromDistributor.estimateGas(productId, date);
+      const buffered = (estimated * 140n) / 100n;
+      gasLimit = buffered > 300000n ? buffered : 300000n;
+    } catch (_) {
+      gasLimit = 350000n;
+    }
+    const tx = await contract.receiveFromDistributor(productId, date, { gasLimit });
     const receipt = await tx.wait();
+    if (!receipt || receipt.status === 0) {
+      throw new Error("Store receiving transaction was reverted on the blockchain.");
+    }
     return { hash: receipt.hash || tx.hash, receipt };
   } catch (error) {
     throw normalizeBlockchainError(error);
@@ -324,8 +368,19 @@ export async function receiveFromDistributor(productId, date) {
 export async function sellToConsumer(productId, consumer, date) {
   try {
     const { contract } = await getSignerAndContract();
-    const tx = await contract.sellToConsumer(productId, consumer, date);
+    let gasLimit = 400000n;
+    try {
+      const estimated = await contract.sellToConsumer.estimateGas(productId, consumer, date);
+      const buffered = (estimated * 140n) / 100n;
+      gasLimit = buffered > 350000n ? buffered : 350000n;
+    } catch (_) {
+      gasLimit = 400000n;
+    }
+    const tx = await contract.sellToConsumer(productId, consumer, date, { gasLimit });
     const receipt = await tx.wait();
+    if (!receipt || receipt.status === 0) {
+      throw new Error("Consumer sale transaction was reverted on the blockchain.");
+    }
     return { hash: receipt.hash || tx.hash, receipt };
   } catch (error) {
     throw normalizeBlockchainError(error);
@@ -366,7 +421,7 @@ export function normalizeBlockchainError(error) {
   const rawMessage = error?.data?.message || error?.error?.message || error?.reason || error?.shortMessage || error?.message || "";
   
   if (rawMessage.includes("Caller does not have required role")) {
-    return new Error('Smart contract execution reverted: "Caller does not have required role". Connected wallet must be registered as a Farmer on the AgriChain Sepolia smart contract.');
+    return new Error('Smart contract execution reverted: "Caller does not have required role". Connected wallet does not possess the required on-chain role for this operation.');
   }
 
   if (rawMessage.includes("Role already registered")) {
@@ -375,6 +430,42 @@ export function normalizeBlockchainError(error) {
 
   if (rawMessage.includes("Invalid role")) {
     return new Error('Smart contract execution reverted: "Invalid role". Must be Farmer (1), Distributor (2), Retailer (3), or Consumer (4).');
+  }
+
+  if (rawMessage.includes("Only product farmer can dispatch")) {
+    return new Error('Smart contract execution reverted: "Only product farmer can dispatch". Connected wallet does not match the original Farmer of this batch.');
+  }
+
+  if (rawMessage.includes("Receiver is not a distributor")) {
+    return new Error('Smart contract execution reverted: "Receiver is not a distributor". The designated recipient address must be registered as a Distributor on the AgriChain contract.');
+  }
+
+  if (rawMessage.includes("Only assigned distributor can receive")) {
+    return new Error('Smart contract execution reverted: "Only assigned distributor can receive". Connected wallet does not match the assigned Distributor for this batch.');
+  }
+
+  if (rawMessage.includes("Receiver is not a retailer")) {
+    return new Error('Smart contract execution reverted: "Receiver is not a retailer". The designated recipient address must be registered as a Retailer on the AgriChain contract.');
+  }
+
+  if (rawMessage.includes("Only assigned distributor can dispatch")) {
+    return new Error('Smart contract execution reverted: "Only assigned distributor can dispatch". Connected wallet does not match the assigned Distributor for this batch.');
+  }
+
+  if (rawMessage.includes("Only assigned retailer can receive")) {
+    return new Error('Smart contract execution reverted: "Only assigned retailer can receive". Connected wallet does not match the assigned Retailer for this batch.');
+  }
+
+  if (rawMessage.includes("Only assigned retailer can sell")) {
+    return new Error('Smart contract execution reverted: "Only assigned retailer can sell". Connected wallet does not match the assigned Retailer for this batch.');
+  }
+
+  if (rawMessage.includes("Consumer wallet must be registered")) {
+    return new Error('Smart contract execution reverted: "Consumer wallet must be registered". The consumer wallet address must be registered on the AgriChain contract.');
+  }
+
+  if (rawMessage.includes("Invalid product status")) {
+    return new Error('Smart contract execution reverted: "Invalid product status". The batch is not in the required state for this transition.');
   }
 
   if (error?.shortMessage) {

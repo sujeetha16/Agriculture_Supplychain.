@@ -82,6 +82,29 @@ function resolveContractAddress() {
 const CONFIGURED_CONTRACT_ADDRESS = resolveContractAddress();
 
 /**
+ * Canonical smart contract delegation & account abstraction managers.
+ * When transactions are executed via EIP-7702 (MetaMask Smart Account delegation) or ERC-4337,
+ * the transaction's outer 'to' address is the delegation/entrypoint contract, which then
+ * executes the call to the AgriChain smart contract.
+ */
+function resolveAuthorizedDelegationManagers() {
+  const defaults = [
+    "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3".toLowerCase(), // Canonical MetaMask EIP-7702 Delegation Manager
+    "0x0000000071727De22E5E9d8BAf0edAc6f37da032".toLowerCase(), // ERC-4337 EntryPoint v0.7
+    "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789".toLowerCase()  // ERC-4337 EntryPoint v0.6
+  ];
+
+  const configured = (process.env.AUTHORIZED_DELEGATION_CONTRACTS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => ethers.isAddress(s));
+
+  return new Set([...defaults, ...configured]);
+}
+
+const AUTHORIZED_DELEGATION_MANAGERS = resolveAuthorizedDelegationManagers();
+
+/**
  * Mapping of Supply-Chain Lifecycle actions to exact AgriChain Solidity event signatures & roles
  */
 const ACTION_EVENT_MAP = {
@@ -269,7 +292,10 @@ async function verifyTransaction(txHash, options = {}) {
     const receiptTo = (receipt.to || "").toLowerCase();
     const expectedContract = (options.contractAddress || CONFIGURED_CONTRACT_ADDRESS).toLowerCase();
 
-    if (!receiptTo || receiptTo !== expectedContract) {
+    const isDirectCall = receiptTo === expectedContract;
+    const isAuthorizedDelegation = AUTHORIZED_DELEGATION_MANAGERS.has(receiptTo);
+
+    if (!receiptTo || (!isDirectCall && !isAuthorizedDelegation)) {
       return {
         status: "CONTRACT_MISMATCH",
         verified: false,
@@ -279,6 +305,21 @@ async function verifyTransaction(txHash, options = {}) {
         destinationAddress: receipt.to || null,
         expectedContractAddress: expectedContract,
         message: `Transaction destination contract (${receipt.to || "none"}) does not match configured AgriChain contract (${expectedContract}).`
+      };
+    }
+
+    // If routed through an authorized delegation manager, ensure receipt contains logs emitted by expectedContract
+    const allLogs = Array.isArray(receipt.logs) ? receipt.logs : [];
+    if (isAuthorizedDelegation && !allLogs.some((l) => (l.address || "").toLowerCase() === expectedContract)) {
+      return {
+        status: "CONTRACT_MISMATCH",
+        verified: false,
+        isSimulated: false,
+        txHash,
+        blockNumber: parseBlockNumber(receipt.blockNumber),
+        destinationAddress: receipt.to || null,
+        expectedContractAddress: expectedContract,
+        message: `Transaction routed through delegation manager (${receipt.to}) did not invoke authorized AgriChain contract (${expectedContract}).`
       };
     }
 
@@ -316,7 +357,6 @@ async function verifyTransaction(txHash, options = {}) {
     const expectedProductIdStr = String(options.productId);
 
     // 5. Inspect logs emitted strictly by the configured AgriChain contract
-    const allLogs = Array.isArray(receipt.logs) ? receipt.logs : [];
     const contractLogs = allLogs.filter(
       (log) => (log.address || "").toLowerCase() === expectedContract
     );
@@ -488,6 +528,8 @@ module.exports = {
   verifyTransaction,
   rpcCall,
   CONFIGURED_CONTRACT_ADDRESS,
+  AUTHORIZED_DELEGATION_MANAGERS,
+  resolveAuthorizedDelegationManagers,
   SEPOLIA_RPC_URLS,
   ACTION_EVENT_MAP,
   normalizeActionKey,

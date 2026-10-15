@@ -8,7 +8,11 @@
     "quantity": "2,500 kg",
     "qualityGrade": "Grade A+ (Premium Export)",
     "storageConditions": "Cold Chain Controlled (3.5°C, 90% RH)",
-    "certifications": ["USDA Organic", "GlobalG.A.P.", "Non-GMO Verified"],
+    "certifications": [
+      "USDA Organic",
+      "GlobalG.A.P.",
+      "Non-GMO Verified"
+    ],
     "estimatedShelfLife": "60 Days",
     "notes": "Crisp texture, high Brix sugar content (14.2°), harvested under optimal morning conditions.",
     "farmer": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
@@ -71,7 +75,11 @@
     "quantity": "800 kg",
     "qualityGrade": "Specialty Grade (SCA 88.5)",
     "storageConditions": "Hermetic GrainPro (18°C, 55% RH)",
-    "certifications": ["Fair Trade", "Rainforest Alliance", "Organic"],
+    "certifications": [
+      "Fair Trade",
+      "Rainforest Alliance",
+      "Organic"
+    ],
     "estimatedShelfLife": "180 Days",
     "notes": "Single origin red bourbon variety, washed process, notes of peach, bergamot, and honey.",
     "farmer": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
@@ -127,7 +135,11 @@
     "quantity": "5,000 kg",
     "qualityGrade": "Grade A Extra Long Grain",
     "storageConditions": "Dry Aerated Silo (22°C, 12% Grain Moisture)",
-    "certifications": ["ISO 22000", "Non-GMO Project", "GAP"],
+    "certifications": [
+      "ISO 22000",
+      "Non-GMO Project",
+      "GAP"
+    ],
     "estimatedShelfLife": "730 Days",
     "notes": "Aged 12 months for elongation ratio > 2.0x, traditional aromatic harvest.",
     "farmer": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
@@ -162,7 +174,10 @@
     "quantity": "1,200 kg",
     "qualityGrade": "Grade A Premium",
     "storageConditions": "Ethylene Monitored (5.5°C, 90% RH)",
-    "certifications": ["USDA Organic", "Fair Trade Certified"],
+    "certifications": [
+      "USDA Organic",
+      "Fair Trade Certified"
+    ],
     "estimatedShelfLife": "21 Days",
     "notes": "Hand-picked at 24% dry matter for optimal buttery flavor and ripening profile.",
     "farmer": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
@@ -180,5 +195,48 @@
         "txHash": "0x8899001122334455667788990011223344556677889900112233445566778899"
       }
     ]
+  },
+  {
+    "productId": 3,
+    "name": "Organic Honeycrisp Apples",
+    "cropType": "Fruits",
+    "harvestDate": "2026-10-15",
+    "farmLocation": "Yakima Valley Orchards, WA",
+    "quantity": "2,500 kg",
+    "qualityGrade": "Grade A+ (Premium Export)",
+    "storageConditions": "Cold Chain Controlled (3.5°C, 90% RH)",
+    "certifications": [
+      "USDA Organic",
+      "GlobalG.A.P."
+    ],
+    "estimatedShelfLife": "60 Days",
+    "notes": "High Brix sugar content, harvested in crisp early-morning conditions.",
+    "farmer": "0x6e3950963cea53aa8c1042fde20ecafe9cf33204",
+    "status": "Created",
+    "qrBlockchainHash": "0xab81dec6b6bfbae31878256b6571763793764f071052777bccd9d29fe3dcac7f",
+    "verificationStatus": "VERIFIED_ON_CHAIN",
+    "isSimulated": false,
+    "blockNumber": 11919071,
+    "history": [
+      {
+        "action": "CREATED",
+        "actorAddress": "0x6e3950963cea53aa8c1042fde20ecafe9cf33204",
+        "receiverAddress": null,
+        "date": "2026-10-15",
+        "txHash": "0xab81dec6b6bfbae31878256b6571763793764f071052777bccd9d29fe3dcac7f",
+        "verificationStatus": "VERIFIED_ON_CHAIN",
+        "isSimulated": false,
+        "blockNumber": 11919071,
+        "gasUsed": "789856",
+        "verifiedAt": "2026-10-15T07:54:43.418Z",
+        "location": "Yakima Valley Orchards, WA",
+        "notes": "Harvest registered and logged."
+      }
+    ],
+    "distributor": null,
+    "retailer": null,
+    "consumer": null,
+    "createdAt": "2026-10-15T07:54:43.419Z",
+    "updatedAt": "2026-10-15T07:54:43.419Z"
   }
 ]
