@@ -12,9 +12,14 @@ Before commencing an AWS deployment, ensure the following are available on your 
 * **AWS CLI v2** configured with credentials (`aws configure`) having permissions for S3, CloudFront, App Runner, IAM, and CloudWatch.
 * **Docker Desktop / Engine** for container building.
 * **Node.js 20+ and npm 10+** for static asset bundling.
-* **Managed Database:** A free MongoDB Atlas cluster connection string with TLS enabled.
+* **Managed Database:** A MongoDB Atlas cluster (or AWS DocumentDB) with TLS enabled.
+* **MongoDB Network Connectivity Architecture:**
+  * AWS App Runner operates with **dynamic outbound public IP addresses**. It does not have fixed static egress IPs by default.
+  * *Option A (Direct Internet Connectivity):* If connecting to MongoDB Atlas over the public internet, Atlas must accept connections from App Runner's outbound IP ranges, secured with TLS (`mongodb+srv://`) and strong SCRAM credential authentication. Never open database access without authentication.
+  * *Option B (VPC Connector Architecture - Enterprise Recommended):* To restrict database access to private IPs or fixed NAT Gateway elastic IPs, provision an AWS VPC with an `AWS::AppRunner::VpcConnector`. This requires dedicated VPC networking subnets and is documented as an optional infrastructure enhancement.
+* **Secrets Encryption:** Secrets are encrypted by default using the AWS-managed key (`aws/secretsmanager`). If using a Customer-Managed KMS Key (CMK), specify `KmsKeyArn`.
 
-> **Honest Status Note:** This project includes fully validated CloudFormation templates, Dockerfiles, and deployment scripts. Live cloud resources have NOT yet been provisioned to avoid unapproved financial charges to your AWS account. Follow the instructions below whenever you choose to execute a live deployment.
+> **Honest Status Note:** This project includes production-ready CloudFormation templates, Dockerfiles, and deployment procedures. Local CLI validation (`aws cloudformation validate-template` / `cfn-lint`) was **NOT RUN** on this development machine because the AWS CLI is not installed locally. Live cloud resources have NOT yet been provisioned to avoid unapproved financial charges to your AWS account. Follow the instructions below whenever you choose to execute a live deployment.
 
 ---
 
@@ -30,7 +35,7 @@ export REPO_NAME="agri-chain-backend"
 # 2. Authenticate Docker with Amazon ECR
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
 
-# 3. Create ECR repository (if not already existing)
+# 3. Create private ECR repository (if not already existing)
 aws ecr create-repository --repository-name $REPO_NAME --region $AWS_REGION || true
 
 # 4. Build and tag the backend container image
@@ -38,12 +43,42 @@ cd agri-chain-supply-management/backend
 docker build -t ${REPO_NAME}:latest .
 docker tag ${REPO_NAME}:latest ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPO_NAME}:latest
 
-# 5. Push container image to ECR
+# 5. Push container image to private ECR
 docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPO_NAME}:latest
 cd ../..
 ```
 
-### Step 2: Deploy CloudFormation Infrastructure Stack
+### Step 2: Provision Secrets in AWS Secrets Manager
+```bash
+# 1. Create Secrets Manager Secret for JWT Signing Key (64-character hex material)
+export JWT_SECRET_ARN=$(aws secretsmanager create-secret \
+  --name "agri-chain/production/jwt-secret" \
+  --description "Production JWT signing secret for Agriculture Supply Chain API" \
+  --secret-string "$(openssl rand -hex 32)" \
+  --region $AWS_REGION \
+  --query ARN --output text)
+
+# 2. Create Secrets Manager Secret for Managed MongoDB Connection URI
+export DB_SECRET_ARN=$(aws secretsmanager create-secret \
+  --name "agri-chain/production/mongodb-uri" \
+  --description "Production MongoDB connection string for Agriculture Supply Chain API" \
+  --secret-string "mongodb+srv://admin:YourSecurePassword@cluster0.mongodb.net/agri_chain?retryWrites=true&w=majority" \
+  --region $AWS_REGION \
+  --query ARN --output text)
+
+# 3. (Optional) Create Secrets Manager Secret for Authenticated Sepolia RPC Endpoint
+# export RPC_SECRET_ARN=$(aws secretsmanager create-secret \
+#   --name "agri-chain/production/sepolia-rpc" \
+#   --description "Production Ethereum Sepolia RPC URL with Alchemy/Infura API Key" \
+#   --secret-string "https://eth-sepolia.g.alchemy.com/v2/YOUR_SECRET_API_KEY" \
+#   --region $AWS_REGION \
+#   --query ARN --output text)
+
+echo "JWT Secret ARN:      $JWT_SECRET_ARN"
+echo "Database Secret ARN: $DB_SECRET_ARN"
+```
+
+### Step 3: Deploy CloudFormation Infrastructure Stack
 ```bash
 # Deploy CloudFormation stack provisioning S3, CloudFront OAC, App Runner, and CloudWatch
 aws cloudformation deploy \
@@ -53,13 +88,15 @@ aws cloudformation deploy \
       ProjectName="agri-chain" \
       Environment="production" \
       BackendImageIdentifier="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPO_NAME}:latest" \
-      JwtSecretParameter="AgriChainSecureJwtSecret2026KeyMustBeRotated" \
-      DatabaseConnectionString="mongodb+srv://admin:YourSecurePassword@cluster0.mongodb.net/agri_chain?retryWrites=true&w=majority" \
+      JwtSecretArn="${JWT_SECRET_ARN}" \
+      DatabaseSecretArn="${DB_SECRET_ARN}" \
+      ContractAddress="0xB601FDccec475b61B8Bc9f3661eC4F73B7499a2D" \
   --capabilities CAPABILITY_NAMED_IAM \
   --region $AWS_REGION
 ```
 
-### Step 3: Extract Stack Outputs
+
+### Step 4: Extract Stack Outputs
 ```bash
 # Query S3 bucket name and CloudFront domain
 export S3_BUCKET=$(aws cloudformation describe-stacks --stack-name agriculture-supply-chain-prod --query "Stacks[0].Outputs[?OutputKey=='FrontendS3BucketName'].OutputValue" --output text)
@@ -71,7 +108,7 @@ echo "CloudFront ID:     $CF_DIST_ID"
 echo "Backend API URL:   $API_URL"
 ```
 
-### Step 4: Build & Upload Frontend Static Artifacts
+### Step 5: Build & Upload Frontend Static Artifacts
 ```bash
 cd agri-chain-supply-management/frontend
 
@@ -126,3 +163,18 @@ aws cloudformation delete-stack --stack-name agriculture-supply-chain-prod --reg
 # 3. Delete the ECR repository
 aws ecr delete-repository --repository-name agri-chain-backend --force --region $AWS_REGION
 ```
+
+---
+
+## 5. Blockchain & Database Consistency Recovery Architecture
+
+### Dual-State Transaction Model
+The Agriculture Supply Chain system coordinates two independent data tiers:
+1. **Decentralized Ledger (Ethereum Sepolia):** State advances via a signed transaction mined on the `AgriChain` smart contract.
+2. **Off-Chain Persistent Database (MongoDB):** State advances via atomic conditional update (`Product.findOneAndUpdate`).
+
+### Recovery Behavior upon Transient Database Failure
+* **Failure Scenario:** An on-chain transaction succeeds on Ethereum Sepolia, but the subsequent HTTP database call fails due to a network timeout, server restart, or database connectivity issue.
+* **Database State:** The MongoDB record remains at the prior lifecycle status (e.g., `Created`), and the transaction hash (`txHash`) has not been appended to the product's `history` array.
+* **Client Retry Recovery:** Because the product is still in `expectedStatus` and `history.txHash: { $ne: txHash }` is satisfied, the client can safely re-submit the request with the identical `txHash`. The backend re-verifies the mined receipt against Ethereum Sepolia and atomically applies the state transition.
+* **Operational Limitation (Absence of Autonomous Reconciler):** The system does not currently feature a background event-listening daemon or cron worker to independently query the smart contract and backfill unrecorded transitions if a client disconnects and never retries. Operational recovery in this edge case requires a client retry or an operator initiating the update with the transaction hash.

@@ -22,7 +22,7 @@
 
 ## 2. Suite Details & Reproduction Commands
 
-### Suite 1: Backend API Security, Authentication & Lifecycle (12 Tests)
+### Suite 1: Backend API Security, Authentication & Lifecycle (14 Tests)
 * **Command:** `npm test` (inside `agri-chain-supply-management/backend`)
 * **Coverage:**
   1. Health Endpoint returns 200 with structured observability payload
@@ -40,7 +40,7 @@
   13. requireWalletMatch permits connected MetaMask wallet under non-production demo persona
   14. requireWalletMatch strictly enforces wallet match in production tier (NODE_ENV=production)
 
-### Suite 2: Blockchain Verification, Fail-Closed Security & Concurrency Suite (27 Tests)
+### Suite 2: Blockchain Verification, Fail-Closed Security & Concurrency Suite (30 Tests)
 * **Command:** `npm test` (inside `agri-chain-supply-management/backend`)
 * **Coverage:**
   1. Valid transaction, correct AgriChain contract, expected event, correct product ID and action
@@ -103,16 +103,16 @@
 * **Output:**
   ```
   vite v5.4.21 building for production...
-  ✓ 284 modules transformed.
+  ✓ 285 modules transformed.
   dist/index.html                               1.42 kB │ gzip:   0.74 kB
   dist/assets/bootstrap-icons-mSm7cUeB.woff2  134.04 kB
   dist/assets/bootstrap-icons-BeopsB42.woff   180.29 kB
   dist/assets/index-BJydt2Zx.css              315.90 kB │ gzip:  47.07 kB
-  dist/assets/index-NZ_sv2Dh.js               123.64 kB │ gzip:  28.57 kB
+  dist/assets/index-DN7bnwmj.js               153.91 kB │ gzip:  34.52 kB
   dist/assets/vendor-iqr3Fnrv.js              215.56 kB │ gzip:  72.51 kB
   dist/assets/web3-CR56BBeQ.js                267.31 kB │ gzip:  99.05 kB
   dist/assets/scanner-BPKgJl4x.js             351.28 kB │ gzip: 106.39 kB
-  ✓ built in 3.75s (zero bundle warnings)
+  ✓ built in 16.51s (zero bundle warnings)
   ```
 
 ### Suite 6: Local API Smoke Micro-Benchmark

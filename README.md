@@ -5,7 +5,7 @@
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.24-363636.svg)](https://soliditylang.org/)
 [![Hardhat](https://img.shields.io/badge/Hardhat-2.22-yellow.svg)](https://hardhat.org/)
 [![AWS CloudFormation](https://img.shields.io/badge/AWS-CloudFormation-orange.svg)](https://aws.amazon.com/cloudformation/)
-[![Tests](https://img.shields.io/badge/Tests-24%20Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-74%20Passing-brightgreen.svg)]()
 
 A cloud-native agricultural provenance, cold-chain logistics, and traceability platform engineered for a **College Cloud Computing Course Capstone** and **Applied Systems Research Evaluation**. Combines containerized Express microservices on AWS App Runner, high-performance edge delivery via Amazon CloudFront (with Origin Access Control), resilient database persistence, and decentralized Ethereum Sepolia smart-contract verification.
 
@@ -17,15 +17,15 @@ To maintain rigorous academic and engineering honesty, this table documents the 
 
 | Component | Status | Implementation Details & Evidence |
 | :--- | :--- | :--- |
-| **Frontend SPA** | **VERIFIED & BUILT** | React 18, Vite 5, Bootstrap 5. 279 modules build cleanly into `dist/`. |
+| **Frontend SPA** | **VERIFIED & BUILT** | React 18, Vite 5, Bootstrap 5. 285 modules build cleanly into code-split chunks (zero chunk size warnings). |
 | **Backend REST API** | **VERIFIED & TESTED** | Express 4, correlation IDs (`x-request-id`), structured CloudWatch logs, health checks. |
-| **Authentication & Security** | **HARDENED & TESTED** | Passwords hashed with **bcrypt** (salt 10); 24h signed **JWTs**; brute-force **rate limiting**; role-based route guards. |
-| **Supply Chain State Machine**| **VERIFIED & TESTED** | Linear 5-state lifecycle (Created $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Sold) enforced on API and contract. |
-| **Smart Contract (`AgriChain.sol`)** | **AUDITED & TESTED** | Solidity 0.8.24; **12/12 automated Hardhat unit tests passing** (access control, role registry, negative security). |
-| **Blockchain Receipt Verifier** | **IMPLEMENTED & TESTED** | Backend JSON-RPC client audits `eth_getTransactionReceipt` via native fetch, explicitly tagging SIMULATED vs CONFIRMED. |
-| **AWS CloudFormation IaC** | **CONFIGURED & VALIDATED** | `aws/cloudformation-template.yaml` declares S3, CloudFront OAC, App Runner, IAM roles, and CloudWatch 5xx Alarms. |
+| **Authentication & Security** | **HARDENED & TESTED** | Passwords hashed with **bcrypt**; strong production **JWT_SECRET** validation; SIWE **wallet challenge-response signature verification**; origin-restricted CORS allowlists. |
+| **Supply Chain State Machine**| **VERIFIED & TESTED** | Linear 5-state lifecycle (Created $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Dispatched $\rightarrow$ Received $\rightarrow$ Sold) with atomic conditional DB updates preventing race conditions. |
+| **Smart Contract (`AgriChain.sol`)** | **AUDITED & TESTED** | Solidity 0.8.24; **18/18 automated Hardhat unit tests passing** (access control, role registry, negative security). |
+| **Blockchain Receipt Verifier** | **HARDENED & TESTED** | Strict fail-closed verification with ethers v6: mandatory action & product ID checks, ABI event decoding, actor/recipient identity validation, zero permissive fallbacks. |
+| **AWS CloudFormation IaC** | **CONFIGURED (CLI VALIDATION NOT RUN)** | `aws/cloudformation-template.yaml` declares S3, CloudFront OAC, App Runner (ECR private, Secrets Manager ARNs), IAM execution roles, SNS, and CloudWatch 5xx Alarm. CLI validation was NOT RUN on this machine because AWS CLI is not installed. |
 | **AWS Live Cloud Deployment** | **PREPARED (PENDING RUN)** | Template ready for deployment; no billable cloud resources created without user approval. |
-| **Empirical Load Harness** | **BENCHMARKED** | Zero-dependency high-concurrency runner (`load_test_native.js`): **452 req/sec, p50: 20ms, 0% error rate**. |
+| **Empirical Load Harness** | **BENCHMARKED (LOCAL)** | Zero-dependency local micro-benchmark (`load_test_native.js`): loopback API throughput, p50/p95 latency metrics, remote endpoint safety guards. |
 
 ---
 
@@ -33,24 +33,23 @@ To maintain rigorous academic and engineering honesty, this table documents the 
 
 ```
                                   [ Consumers, Farmers, Distributors, Retailers ]
-                                                         │
-                                                         ▼
-                                            [ Amazon CloudFront CDN ]
-                                          (Global Edge SSL, OAC, Caching)
-                                                         │
-                                         ┌───────────────┴───────────────┐
-                                         │ Route: /*                     │ Route: /api/*
-                                         ▼                               ▼
-                                [ Amazon S3 Bucket ]            [ AWS App Runner Service ]
-                              (Private Encrypted React SPA)     (Node.js 20 Express Container)
-                                                                         │
-                                         ┌───────────────────────────────┴───────────────────────────────┐
-                                         ▼                                                               ▼
-                              [ Persistence Tier ]                                            [ Consensus Ledger ]
-                     ┌───────────────────────────────────┐                           ┌───────────────────────────────────┐
-                     │   MongoDB Atlas / AWS DocumentDB  │                           │   Ethereum Sepolia Smart Contract │
-                     │   (External TLS Managed Cluster)  │                           │   (0xB601FDccec475b61B8Bc9f3661eC)│
-                     └───────────────────────────────────┘                           └───────────────────────────────────┘
+                                             │                         │
+                        1. Web App (HTTPS)   │                         │ 2. Direct API Calls (HTTPS /api/*)
+                                             ▼                         ▼
+                                 [ Amazon CloudFront CDN ]    [ AWS App Runner Service ]
+                               (Global Edge SSL, OAC via S3)  (Node.js 20 Express Container)
+                                             │                         │
+                                             ▼                         │ (Origin-Restricted CORS)
+                                   [ Amazon S3 Bucket ]                │
+                              (Private Encrypted React SPA)            │
+                                                                       │
+                                       ┌───────────────────────────────┴───────────────────────────────┐
+                                       ▼                                                               ▼
+                            [ Persistence Tier ]                                            [ Consensus Ledger ]
+                   ┌───────────────────────────────────┐                           ┌───────────────────────────────────┐
+                   │   MongoDB Atlas / AWS DocumentDB  │                           │   Ethereum Sepolia Smart Contract │
+                   │   (External TLS Managed Cluster)  │                           │   (0xB601FDccec475b61B8Bc9f3661eC)│
+                   └───────────────────────────────────┘                           └───────────────────────────────────┘
 ```
 
 ### Architectural Pillars:
@@ -113,24 +112,27 @@ npm run dev
 
 ## 5. Automated Testing & Verification
 
-### Run Smart Contract Suite (12 Tests)
+### Run Smart Contract Suite (18 Tests)
 ```bash
 cd agri-chain-supply-management/blockchain
 npx hardhat test
 ```
 *Tests role registration, product creation, sequential Farmer $\rightarrow$ Distributor $\rightarrow$ Retailer $\rightarrow$ Consumer transitions, and negative access control attacks.*
 
-### Run Backend API & Security Suite (12 Tests)
+### Run Backend API, Blockchain & QR Verification Suite (53 Tests)
 ```bash
 cd agri-chain-supply-management/backend
 npm test
 ```
-*Tests `/api/health`, registration validation, password hashing, JWT authentication, role enforcement, duplicate prevention, and cryptographic receipt verification.*
+*Executes all 53 automated tests across three comprehensive suites:*
+* *`auth_and_lifecycle.test.js` (14 tests): `/api/health`, registration validation, password hashing, JWT authentication, role enforcement, duplicate prevention, sequential lifecycle state transitions, and MetaMask wallet binding support.*
+* *`blockchain_verification.test.js` (27 tests): Contract address validation, event log ABI decoding, product ID matching, stakeholder identity verification, reverted tx blocking, pending tx handling, unverified state blocking DB, duplicate tx prevention, SIWE wallet challenge verification, CloudFormation validation, ABI interface consistency, and fail-closed security.*
+* *`qr_payload.test.js` (12 tests): Positive/negative parsing for JSON formats (`productId`, `id`), absolute/relative `/trace/:id` URLs, raw batch integers, prefixed IDs, malformed JSON, and invalid inputs.*
 
 ### Run Empirical Performance Load Test
 ```bash
-# Benchmark local or cloud API with 10 virtual users across 100 requests
-node experiments/load_test_native.js --url http://localhost:5000 --users 10 --requests 100
+# Benchmark local API with 10 virtual users across 100 requests (Local loopback smoke test)
+node experiments/run_local_benchmark.js
 ```
 
 ---
@@ -182,6 +184,7 @@ aws cloudfront create-invalidation --distribution-id <DISTRIBUTION_ID> --paths "
 1. **The Agricultural Oracle Problem:** Blockchain immutability guarantees that once data is written, it cannot be tampered with or deleted. However, it cannot physically prove that the farmer entered truthful crop varieties at harvest time.
 2. **Sensor Hardware Attestation:** In the current prototype, cold-chain temperature readings are operator-entered or simulated. Production deployment requires hardware secure elements (e.g. TPM / ATECC608A) physically bound to refrigeration units.
 3. **Testnet Economic Security:** Sepolia testnet validators operate without financial stakes. Production deployment requires mainnet or an Ethereum Layer 2 rollup (e.g. Arbitrum, Optimism).
+4. **Dual-State Recovery Strategy & Absence of Autonomous Reconciler:** If an on-chain transaction succeeds on Ethereum Sepolia but the subsequent database update fails (e.g., transient database timeout or server restart), the MongoDB record remains at the prior state. Because the product is still in `expectedStatus` and the transaction hash has not been appended to `history`, the client can safely re-submit the request with the same `txHash` (client-driven retry). The API re-verifies the mined receipt and atomically applies the state transition. However, the system currently lacks a background event polling daemon to autonomously reconcile unrecorded transitions if a client disconnects and never retries.
 
 ---
 
@@ -194,5 +197,6 @@ aws cloudfront create-invalidation --distribution-id <DISTRIBUTION_ID> --paths "
 * [`docs/BLOCKCHAIN_ARCHITECTURE.md`](file:///c:/Users/ADMIN/Documents/Agriculture_Supplychain/docs/BLOCKCHAIN_ARCHITECTURE.md) — Smart contract state machine, gas optimization, and storage boundaries.
 * [`docs/BLOCKCHAIN_TESTING.md`](file:///c:/Users/ADMIN/Documents/Agriculture_Supplychain/docs/BLOCKCHAIN_TESTING.md) — Hardhat testing report with test counts and reproduction steps.
 * [`docs/TEST_REPORT.md`](file:///c:/Users/ADMIN/Documents/Agriculture_Supplychain/docs/TEST_REPORT.md) — Comprehensive test execution logs and benchmark results.
+* [`docs/PERFORMANCE_REPORT.md`](file:///c:/Users/ADMIN/Documents/Agriculture_Supplychain/docs/PERFORMANCE_REPORT.md) — High-concurrency empirical benchmark measurements, latency distributions, and measurement boundary definitions.
 * [`experiments/README.md`](file:///c:/Users/ADMIN/Documents/Agriculture_Supplychain/experiments/README.md) — Load testing methodology and workload definitions.
 * [`research/RESEARCH_PLAN.md`](file:///c:/Users/ADMIN/Documents/Agriculture_Supplychain/research/RESEARCH_PLAN.md) — Academic research plan, research questions (RQs), and bibliography.

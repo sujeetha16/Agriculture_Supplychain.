@@ -6,21 +6,21 @@
     "isLocalhost": true,
     "concurrencyVUs": 10,
     "totalRequests": 100,
-    "timestamp": "2026-10-13T08:31:34.753Z"
+    "timestamp": "2026-10-15T16:43:22.776Z"
   },
   "performanceMetrics": {
-    "totalDurationMs": 197,
-    "throughputRps": 507.61,
+    "totalDurationMs": 202,
+    "throughputRps": 495.05,
     "successCount": 100,
     "failureCount": 0,
     "errorRatePercent": 0,
     "latencyMs": {
-      "min": 14.93,
-      "p50": 18.22,
-      "p90": 20.36,
-      "p95": 22.7,
-      "p99": 29.03,
-      "max": 29.62
+      "min": 14.24,
+      "p50": 18.28,
+      "p90": 21.84,
+      "p95": 23.65,
+      "p99": 28.56,
+      "max": 29.51
     }
   }
 }

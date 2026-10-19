@@ -5,7 +5,7 @@
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.24-363636.svg)](https://soliditylang.org/)
 [![Hardhat](https://img.shields.io/badge/Hardhat-2.22-yellow.svg)](https://hardhat.org/)
 [![AWS CloudFormation](https://img.shields.io/badge/AWS-CloudFormation-orange.svg)](https://aws.amazon.com/cloudformation/)
-[![Tests](https://img.shields.io/badge/Tests-71%20Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-74%20Passing-brightgreen.svg)]()
 
 A cloud-native agricultural provenance, cold-chain logistics, and traceability platform engineered for a **College Cloud Computing Course Capstone** and **Applied Systems Research Evaluation**. Combines containerized Express microservices on AWS App Runner, high-performance edge delivery via Amazon CloudFront (with Origin Access Control), resilient database persistence, and decentralized Ethereum Sepolia smart-contract verification.
 
