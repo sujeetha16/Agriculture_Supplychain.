@@ -303,7 +303,7 @@ Resources:
         - Endpoint: !Ref AlarmNotificationEmail
           Protocol: email
 
-  # 9. CloudWatch Metric Alarm for Backend 5xx Server Errors
+
   Backend5xxErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     DependsOn: BackendAppRunnerService
@@ -318,6 +318,8 @@ Resources:
       Threshold: 5
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Dimensions:
+        - Name: ServiceID
+          Value: !GetAtt BackendAppRunnerService.ServiceId
         - Name: ServiceName
           Value: !Sub "${ProjectName}-api-${Environment}"
       TreatMissingData: notBreaching
@@ -327,12 +329,15 @@ Outputs:
   CloudFrontDistributionURL:
     Description: Global HTTPS Edge URL for the Agriculture Supply Chain web application
     Value: !Sub "https://${CloudFrontDistribution.DomainName}"
+
   BackendServiceURL:
     Description: Production HTTPS URL for the containerized AWS App Runner API
     Value: !Sub "https://${BackendAppRunnerService.ServiceUrl}"
+
   FrontendS3BucketName:
     Description: Private S3 Bucket housing production Vite static artifacts
     Value: !Ref FrontendS3Bucket
+
   CloudFrontDistributionId:
     Description: CloudFront Distribution Identifier for invalidation triggers
     Value: !Ref CloudFrontDistribution

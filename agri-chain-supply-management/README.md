@@ -119,15 +119,15 @@ npx hardhat test
 ```
 *Tests role registration, product creation, sequential Farmer $\rightarrow$ Distributor $\rightarrow$ Retailer $\rightarrow$ Consumer transitions, and negative access control attacks.*
 
-### Run Backend API, Blockchain & QR Verification Suite (53 Tests)
+### Run Backend API, Blockchain & QR Verification Suite (56 Tests)
 ```bash
 cd agri-chain-supply-management/backend
 npm test
 ```
-*Executes all 53 automated tests across three comprehensive suites:*
-* *`auth_and_lifecycle.test.js` (14 tests): `/api/health`, registration validation, password hashing, JWT authentication, role enforcement, duplicate prevention, sequential lifecycle state transitions, and MetaMask wallet binding support.*
-* *`blockchain_verification.test.js` (27 tests): Contract address validation, event log ABI decoding, product ID matching, stakeholder identity verification, reverted tx blocking, pending tx handling, unverified state blocking DB, duplicate tx prevention, SIWE wallet challenge verification, CloudFormation validation, ABI interface consistency, and fail-closed security.*
-* *`qr_payload.test.js` (12 tests): Positive/negative parsing for JSON formats (`productId`, `id`), absolute/relative `/trace/:id` URLs, raw batch integers, prefixed IDs, malformed JSON, and invalid inputs.*
+*Executes all 56 automated tests across three comprehensive suites:*
+* *`auth_and_lifecycle.test.js` (14 tests):* `/api/health`, registration validation, password hashing, JWT authentication, role enforcement, duplicate prevention, sequential lifecycle state transitions, and MetaMask wallet binding support.
+* *`blockchain_verification.test.js` (30 tests):* Contract address validation, event log ABI decoding, product ID matching, stakeholder identity verification, reverted tx blocking, pending tx handling, unverified state blocking DB, duplicate tx prevention, SIWE wallet challenge verification, CloudFormation validation, ABI interface consistency, EIP-7702 delegation verification, and fail-closed security.
+* *`qr_payload.test.js` (12 tests):* Positive/negative parsing for JSON formats (`productId`, `id`), absolute/relative `/trace/:id` URLs, raw batch integers, prefixed IDs, malformed JSON, and invalid inputs.
 
 ### Run Empirical Performance Load Test
 ```bash
@@ -160,7 +160,7 @@ aws ecr get-login-password --region us-east-1 | docker login --username AWS --pa
 docker build -t agri-chain-backend:latest ./agri-chain-supply-management/backend
 docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/agri-chain-backend:latest
 
-# 2. Deploy CloudFormation stack
+# 2. Deploy CloudFormation stack (Parameters JwtSecretArn and DatabaseSecretArn are required)
 aws cloudformation deploy \
   --template-file agri-chain-supply-management/aws/cloudformation-template.yaml \
   --stack-name agriculture-supply-chain-prod \
@@ -168,6 +168,9 @@ aws cloudformation deploy \
       ProjectName="agri-chain" \
       Environment="production" \
       BackendImageIdentifier="<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/agri-chain-backend:latest" \
+      JwtSecretArn="<JWT_SECRET_ARN>" \
+      DatabaseSecretArn="<DATABASE_SECRET_ARN>" \
+      ContractAddress="0xB601FDccec475b61B8Bc9f3661eC4F73B7499a2D" \
   --capabilities CAPABILITY_NAMED_IAM
 
 # 3. Build & sync frontend assets to S3

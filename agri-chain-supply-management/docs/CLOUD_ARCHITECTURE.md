@@ -94,8 +94,13 @@ graph TD
 | :--- | :--- | :--- | :--- |
 | **Amazon CloudFront** | 10 GB transfer, PriceClass_100 | Data transfer out ($0.085/GB) | **$0.00** (Free Tier covers 1 TB/mo) |
 | **Amazon S3** | < 100 MB static assets | Storage ($0.023/GB) & PUT/GET requests | **$0.00** (Free Tier covers 5 GB) |
-| **AWS App Runner** | 1 vCPU, 2 GB RAM (paused when idle) | Compute ($0.064/vCPU-hr, $0.007/GB-hr) | **$3.00 - $7.00** (pay-per-request) |
+| **AWS App Runner** | 1 vCPU, 2 GB RAM (provisioned memory) | Memory ($0.007/GB-hr) & CPU ($0.064/vCPU-hr) | **~$10.00 - $20.00** (No Free Tier; continuous 2 GB RAM = ~$10.08/mo) |
+| **AWS Secrets Manager** | 2-3 secrets (`jwt-secret`, `mongodb-uri`) | Storage ($0.40/secret/mo) + API calls | **~$0.80 - $1.20** (No permanent Free Tier) |
+| **Amazon ECR** | ~180 MB container image | Storage ($0.10/GB-mo after 500 MB) | **$0.00** (Free Tier covers 500 MB/mo) |
 | **MongoDB Atlas** | M0 Sandbox (Shared Cluster) | 512 MB storage, shared RAM | **$0.00** (Free forever) |
-| **CloudWatch Logs** | < 1 GB log ingestion | Ingestion ($0.50/GB) | **$0.00** (Free Tier covers 5 GB) |
+| **CloudWatch Logs & Alarms** | 1 alarm, < 1 GB log ingestion | 10 free custom alarms, 5 GB logs | **$0.00** (Free Tier covers 10 alarms & 5 GB) |
+| **Amazon SNS** | Operational 5xx email alerts | First 1,000 emails/month free | **$0.00** (Free Tier covers 1,000 emails/mo) |
 | **Ethereum Sepolia** | Testnet ETH | Testnet gas faucets | **$0.00** (Zero monetary cost) |
-| **Total Estimated Cost**| Low-traffic student capstone | | **~$3.00 - $7.00 / month** |
+| **Total Estimated Cost**| Low-traffic student capstone | App Runner continuous RAM + Secrets Manager | **~$11.00 - $22.00 / month** |
+
+> **Cost Governance Note:** This project cannot be claimed as ₹0 out-of-pocket on a permanent basis. AWS promotional credits (e.g. ~$119.99 student credits) offset charges during the credit validity window, but running App Runner continuously incurs real hourly charges. Operators should tear down the CloudFormation stack and empty retained S3/ECR resources immediately after project evaluation.
