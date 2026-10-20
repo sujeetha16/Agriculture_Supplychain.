@@ -71,7 +71,6 @@ Parameters:
     Type: String
     Default: ""
     Description: Optional email address to receive CloudWatch 5xx alarm notifications via Amazon SNS.
-
 Conditions:
   HasCustomAllowedOrigins: !Not [!Equals [!Ref FrontendAllowedOrigins, ""]]
   HasNotificationEmail: !Not [!Equals [!Ref AlarmNotificationEmail, ""]]
@@ -84,6 +83,7 @@ Resources:
   FrontendS3Bucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       BucketName: !Sub "${ProjectName}-frontend-${AWS::AccountId}-${AWS::Region}"
       BucketEncryption:
@@ -267,9 +267,15 @@ Resources:
                   - !Ref SepoliaRpcUrl
                   - ""
             RuntimeEnvironmentSecrets:
-              JWT_SECRET: !Ref JwtSecretArn
-              MONGODB_URI: !Ref DatabaseSecretArn
-              SEPOLIA_RPC_URL: !If [HasSepoliaRpcSecret, !Ref SepoliaRpcSecretArn, !Ref "AWS::NoValue"]
+              - Name: JWT_SECRET
+                Value: !Ref JwtSecretArn
+              - Name: MONGODB_URI
+                Value: !Ref DatabaseSecretArn
+              - !If
+                - HasSepoliaRpcSecret
+                - Name: SEPOLIA_RPC_URL
+                  Value: !Ref SepoliaRpcSecretArn
+                - !Ref "AWS::NoValue"
       InstanceConfiguration:
         Cpu: "1024" # 1 vCPU
         Memory: "2048" # 2 GB RAM
